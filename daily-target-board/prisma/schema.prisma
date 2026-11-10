@@ -1,0 +1,76 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// What a person is allowed to see and do. Designation decides the Role.
+enum Role {
+  STAFF
+  SUPERVISOR
+  BRANCH_MANAGER
+  CLUSTER_HEAD
+}
+
+model Cluster {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  branches  Branch[]
+  users     User[]
+  createdAt DateTime @default(now())
+}
+
+model Branch {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  name      String
+  clusterId String
+  cluster   Cluster  @relation(fields: [clusterId], references: [id])
+  users     User[]
+  createdAt DateTime @default(now())
+
+  @@index([clusterId])
+}
+
+model Designation {
+  id                   String  @id @default(cuid())
+  code                 String  @unique // e.g. CRO, SALES_EXEC
+  name                 String
+  role                 Role
+  requiresVerification Boolean @default(true) // false for ABH
+  users                User[]
+}
+
+model User {
+  id              String   @id @default(cuid())
+  name            String
+  email           String   @unique
+  passwordHash    String
+  isActive        Boolean  @default(true)
+  isBranchContact Boolean  @default(false) // true for the BH only
+
+  designationId String
+  designation   Designation @relation(fields: [designationId], references: [id])
+
+  // Every user belongs to a cluster. Only the Cluster Head has no branch.
+  clusterId String
+  cluster   Cluster @relation(fields: [clusterId], references: [id])
+  branchId  String?
+  branch    Branch? @relation(fields: [branchId], references: [id])
+
+  // Sales Executive -> Sales Manager, for example
+  reportsToId String?
+  reportsTo   User?   @relation("ReportsTo", fields: [reportsToId], references: [id])
+  reports     User[]  @relation("ReportsTo")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([clusterId])
+  @@index([branchId])
+  @@index([reportsToId])
+}
