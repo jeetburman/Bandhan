@@ -16,42 +16,55 @@ enum Role {
   CLUSTER_HEAD
 }
 
+enum MetricScope {
+  INDIVIDUAL // each employee has their own target
+  BRANCH // one shared target for the whole branch
+}
+
 model Cluster {
-  id        String   @id @default(cuid())
-  name      String   @unique
-  branches  Branch[]
-  users     User[]
-  createdAt DateTime @default(now())
+  id               String             @id @default(cuid())
+  name             String             @unique
+  branches         Branch[]
+  users            User[]
+  createdAt        DateTime           @default(now())
+  DesignationQuota DesignationQuota[]
 }
 
 model Branch {
-  id        String   @id @default(cuid())
-  code      String   @unique
-  name      String
-  clusterId String
-  cluster   Cluster  @relation(fields: [clusterId], references: [id])
-  users     User[]
-  createdAt DateTime @default(now())
+  id           String         @id @default(cuid())
+  code         String         @unique
+  name         String
+  clusterId    String
+  cluster      Cluster        @relation(fields: [clusterId], references: [id])
+  users        User[]
+  createdAt    DateTime       @default(now())
+  BranchTarget BranchTarget[]
+  TargetPlan   TargetPlan[]
+  BranchSlice  BranchSlice[]
 
   @@index([clusterId])
 }
 
 model Designation {
-  id                   String  @id @default(cuid())
-  code                 String  @unique // e.g. CRO, SALES_EXEC
+  id                   String             @id @default(cuid())
+  code                 String             @unique // e.g. CRO, SALES_EXEC
   name                 String
   role                 Role
-  requiresVerification Boolean @default(true) // false for ABH
+  requiresVerification Boolean            @default(true) // false for ABH
   users                User[]
+  DesignationQuota     DesignationQuota[]
 }
 
 model User {
-  id              String   @id @default(cuid())
+  id              String  @id @default(cuid())
   name            String
-  email           String   @unique
+  email           String  @unique
   passwordHash    String
-  isActive        Boolean  @default(true)
-  isBranchContact Boolean  @default(false) // true for the BH only
+  isActive        Boolean @default(true)
+  isBranchContact Boolean @default(false) // true for the BH only
+
+  plansCreated   TargetPlan[] @relation("PlanCreator")
+  plansPublished TargetPlan[] @relation("PlanPublisher")
 
   designationId String
   designation   Designation @relation(fields: [designationId], references: [id])
@@ -67,10 +80,288 @@ model User {
   reportsTo   User?   @relation("ReportsTo", fields: [reportsToId], references: [id])
   reports     User[]  @relation("ReportsTo")
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  BranchTarget BranchTarget[]
+  TargetLine   TargetLine[]
+  TargetSlice  TargetSlice[]
 
   @@index([clusterId])
   @@index([branchId])
   @@index([reportsToId])
+}
+
+// ---------- Product catalogue ----------
+
+enum MetricUnit {
+  COUNT // whole items: accounts, SIPs, cards
+  AMOUNT // money, stored as integer paise
+}
+
+enum Pacing {
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
+enum CreditBasis {
+  UNITS // credits the number of items sold
+  AMOUNT // credits the sale amount, in paise
+}
+
+// A number that a target is set on, e.g. SA_COUNT or CASA_VALUE.
+model Metric {
+  id               String             @id @default(cuid())
+  code             String             @unique
+  name             String
+  unit             MetricUnit
+  scope            MetricScope        @default(INDIVIDUAL)
+  pacing           Pacing
+  sortOrder        Int                @default(0)
+  isActive         Boolean            @default(true)
+  productLinks     ProductMetric[]
+  optionLinks      OptionMetric[]
+  BranchTarget     BranchTarget[]
+  DesignationQuota DesignationQuota[]
+  PlanBranchTarget PlanBranchTarget[]
+  TargetLine       TargetLine[]
+  TargetSlice      TargetSlice[]
+  BranchSlice      BranchSlice[]
+}
+
+model ProductCategory {
+  id        String    @id @default(cuid())
+  code      String    @unique
+  name      String
+  sortOrder Int       @default(0)
+  isActive  Boolean   @default(true)
+  products  Product[]
+}
+
+model Product {
+  id           String               @id @default(cuid())
+  code         String               @unique
+  name         String
+  categoryId   String
+  category     ProductCategory      @relation(fields: [categoryId], references: [id])
+  sortOrder    Int                  @default(0)
+  isActive     Boolean              @default(true)
+  optionGroups ProductOptionGroup[]
+  metricLinks  ProductMetric[]
+
+  @@index([categoryId])
+}
+
+// A choice within a product, e.g. "Variant" for a savings account, or "Source" for an FD.
+model ProductOptionGroup {
+  id         String          @id @default(cuid())
+  productId  String
+  product    Product         @relation(fields: [productId], references: [id])
+  code       String
+  name       String
+  isRequired Boolean         @default(true)
+  sortOrder  Int             @default(0)
+  isActive   Boolean         @default(true)
+  options    ProductOption[]
+
+  @@unique([productId, code])
+  @@index([productId])
+}
+
+model ProductOption {
+  id          String             @id @default(cuid())
+  groupId     String
+  group       ProductOptionGroup @relation(fields: [groupId], references: [id])
+  code        String
+  name        String
+  section     String? // only used to group options in a dropdown, e.g. "Retail", "Salary"
+  sortOrder   Int                @default(0)
+  isActive    Boolean            @default(true)
+  metricLinks OptionMetric[]
+
+  @@unique([groupId, code])
+  @@index([groupId])
+}
+
+// Any sale of this product credits this metric.
+model ProductMetric {
+  id        String      @id @default(cuid())
+  productId String
+  product   Product     @relation(fields: [productId], references: [id])
+  metricId  String
+  metric    Metric      @relation(fields: [metricId], references: [id])
+  basis     CreditBasis
+
+  @@unique([productId, metricId])
+  @@index([metricId])
+}
+
+// A sale that includes this option also credits this metric.
+model OptionMetric {
+  id       String        @id @default(cuid())
+  optionId String
+  option   ProductOption @relation(fields: [optionId], references: [id])
+  metricId String
+  metric   Metric        @relation(fields: [metricId], references: [id])
+  basis    CreditBasis
+
+  @@unique([optionId, metricId])
+  @@index([metricId])
+}
+
+// ---------- Targets ----------
+
+enum PlanStatus {
+  DRAFT
+  PUBLISHED
+  SUPERSEDED
+}
+
+enum SliceKind {
+  DAY
+  WEEK
+  MONTH
+  CARRY
+}
+
+// The Cluster Head's instruction: one branch, one metric, one month. Editable.
+model BranchTarget {
+  id        String   @id @default(cuid())
+  branchId  String
+  branch    Branch   @relation(fields: [branchId], references: [id])
+  metricId  String
+  metric    Metric   @relation(fields: [metricId], references: [id])
+  month     String   @db.VarChar(7) // "YYYY-MM"
+  quantity  BigInt // a count, or paise
+  setById   String
+  setBy     User     @relation(fields: [setById], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([branchId, metricId, month])
+  @@index([month])
+}
+
+// The pre-defined number per designation, per metric, per month.
+model DesignationQuota {
+  id            String      @id @default(cuid())
+  clusterId     String
+  cluster       Cluster     @relation(fields: [clusterId], references: [id])
+  designationId String
+  designation   Designation @relation(fields: [designationId], references: [id])
+  metricId      String
+  metric        Metric      @relation(fields: [metricId], references: [id])
+  month         String      @db.VarChar(7)
+  quantity      BigInt
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@unique([clusterId, designationId, metricId, month])
+  @@index([month])
+}
+
+// One version of a branch's plan for one month.
+model TargetPlan {
+  id            String     @id @default(cuid())
+  branchId      String
+  branch        Branch     @relation(fields: [branchId], references: [id])
+  month         String     @db.VarChar(7)
+  version       Int
+  status        PlanStatus @default(DRAFT)
+  effectiveFrom String     @db.VarChar(10) // "YYYY-MM-DD"
+  createdById   String
+  createdBy     User       @relation("PlanCreator", fields: [createdById], references: [id])
+  createdAt     DateTime   @default(now())
+  publishedById String?
+  publishedBy   User?      @relation("PlanPublisher", fields: [publishedById], references: [id])
+  publishedAt   DateTime?
+
+  branchTargets PlanBranchTarget[]
+  lines         TargetLine[]
+  slices        TargetSlice[]
+  branchSlices  BranchSlice[]
+
+  @@unique([branchId, month, version])
+  @@index([branchId, month, status])
+}
+
+// The branch figure this plan was built against (a snapshot of BranchTarget).
+model PlanBranchTarget {
+  id       String     @id @default(cuid())
+  planId   String
+  plan     TargetPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  metricId String
+  metric   Metric     @relation(fields: [metricId], references: [id])
+  quantity BigInt
+
+  @@unique([planId, metricId])
+}
+
+// One employee's monthly target for one metric. Total = baseQty + extraQty.
+model TargetLine {
+  id        String     @id @default(cuid())
+  planId    String
+  plan      TargetPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User       @relation(fields: [userId], references: [id])
+  metricId  String
+  metric    Metric     @relation(fields: [metricId], references: [id])
+  baseQty   BigInt // from the designation quota
+  extraQty  BigInt     @default(0) // added by hand by the branch manager
+  extraNote String?
+
+  @@unique([planId, userId, metricId])
+  @@index([userId])
+}
+
+// A daily, weekly, monthly or carried slice of an employee's target.
+model TargetSlice {
+  id               String      @id @default(cuid())
+  planId           String? // empty for CARRY slices
+  plan             TargetPlan? @relation(fields: [planId], references: [id])
+  userId           String
+  user             User        @relation(fields: [userId], references: [id])
+  metricId         String
+  metric           Metric      @relation(fields: [metricId], references: [id])
+  month            String      @db.VarChar(7)
+  kind             SliceKind
+  periodStart      String      @db.VarChar(10)
+  periodEnd        String      @db.VarChar(10)
+  dueDate          String      @db.VarChar(10)
+  workingDays      Int
+  plannedQty       BigInt
+  carriedFromMonth String?     @db.VarChar(7)
+  closedAt         DateTime?
+  shortfallAtClose BigInt?
+
+  @@unique([userId, metricId, month, kind, periodStart])
+  @@index([userId, month])
+  @@index([dueDate])
+  @@index([planId])
+}
+
+// The same, for targets that belong to the whole branch (e.g. Affluent Legacy).
+model BranchSlice {
+  id               String      @id @default(cuid())
+  planId           String?
+  plan             TargetPlan? @relation(fields: [planId], references: [id])
+  branchId         String
+  branch           Branch      @relation(fields: [branchId], references: [id])
+  metricId         String
+  metric           Metric      @relation(fields: [metricId], references: [id])
+  month            String      @db.VarChar(7)
+  kind             SliceKind
+  periodStart      String      @db.VarChar(10)
+  periodEnd        String      @db.VarChar(10)
+  dueDate          String      @db.VarChar(10)
+  workingDays      Int
+  plannedQty       BigInt
+  carriedFromMonth String?     @db.VarChar(7)
+  closedAt         DateTime?
+  shortfallAtClose BigInt?
+
+  @@unique([branchId, metricId, month, kind, periodStart])
+  @@index([branchId, month])
+  @@index([dueDate])
+  @@index([planId])
 }

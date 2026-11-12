@@ -73,3 +73,23 @@ export function workingDaysInRange(
   }
   return days;
 }
+
+export function dayOfWeek(date: BusinessDate): number {
+  return parse(date).getUTCDay();
+}
+
+/** First and last calendar day of a "YYYY-MM" month. Throws on an invalid month. */
+export function monthRange(month: string): { start: BusinessDate; end: BusinessDate } {
+  const match = /^(\d{4})-(\d{2})$/.exec(month);
+  if (!match) throw new Error(`Invalid month: "${month}"`);
+
+  const year = Number(match[1]);
+  const monthNumber = Number(match[2]);
+  if (monthNumber < 1 || monthNumber > 12) throw new Error(`Invalid month: "${month}"`);
+
+  return {
+    start: format(new Date(Date.UTC(year, monthNumber - 1, 1))),
+    // Day 0 of the *next* month is the last day of this one.
+    end: format(new Date(Date.UTC(year, monthNumber, 0))),
+  };
+}

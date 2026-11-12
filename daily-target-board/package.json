@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "db:seed:catalog": "tsx prisma/seed-catalog.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
