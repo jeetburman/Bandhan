@@ -25,6 +25,7 @@ model Cluster {
   id               String             @id @default(cuid())
   name             String             @unique
   branches         Branch[]
+  holidays         Holiday[]
   users            User[]
   createdAt        DateTime           @default(now())
   DesignationQuota DesignationQuota[]
@@ -37,10 +38,12 @@ model Branch {
   clusterId    String
   cluster      Cluster        @relation(fields: [clusterId], references: [id])
   users        User[]
+  holidays     Holiday[]
   createdAt    DateTime       @default(now())
   BranchTarget BranchTarget[]
   TargetPlan   TargetPlan[]
   BranchSlice  BranchSlice[]
+  AuditLog     AuditLog[]
 
   @@index([clusterId])
 }
@@ -56,12 +59,13 @@ model Designation {
 }
 
 model User {
-  id              String  @id @default(cuid())
+  id              String    @id @default(cuid())
   name            String
-  email           String  @unique
+  email           String    @unique
   passwordHash    String
-  isActive        Boolean @default(true)
-  isBranchContact Boolean @default(false) // true for the BH only
+  holidaysAdded   Holiday[]
+  isActive        Boolean   @default(true)
+  isBranchContact Boolean   @default(false) // true for the BH only
 
   plansCreated   TargetPlan[] @relation("PlanCreator")
   plansPublished TargetPlan[] @relation("PlanPublisher")
@@ -85,6 +89,7 @@ model User {
   BranchTarget BranchTarget[]
   TargetLine   TargetLine[]
   TargetSlice  TargetSlice[]
+  AuditLog     AuditLog[]
 
   @@index([clusterId])
   @@index([branchId])
@@ -266,6 +271,7 @@ model TargetPlan {
   branchId      String
   branch        Branch     @relation(fields: [branchId], references: [id])
   month         String     @db.VarChar(7)
+  holidayDates  String[]   @default([])
   version       Int
   status        PlanStatus @default(DRAFT)
   effectiveFrom String     @db.VarChar(10) // "YYYY-MM-DD"
@@ -364,4 +370,44 @@ model BranchSlice {
   @@index([branchId, month])
   @@index([dueDate])
   @@index([planId])
+}
+
+// ---------- Calendar ----------
+
+// A festival or national holiday. No branch means the whole cluster is closed.
+model Holiday {
+  id        String   @id @default(cuid())
+  date      String   @db.VarChar(10) // "YYYY-MM-DD"
+  name      String
+  clusterId String
+  cluster   Cluster  @relation(fields: [clusterId], references: [id])
+  branchId  String?
+  branch    Branch?  @relation(fields: [branchId], references: [id])
+  addedById String?
+  addedBy   User?    @relation(fields: [addedById], references: [id])
+  createdAt DateTime @default(now())
+
+  @@unique([clusterId, branchId, date])
+  @@index([date])
+}
+
+// ---------- Audit ----------
+
+// Append-only record of who did what. Rows are only ever inserted.
+model AuditLog {
+  id         String   @id @default(cuid())
+  at         DateTime @default(now())
+  actorId    String?
+  actor      User?    @relation(fields: [actorId], references: [id])
+  branchId   String?
+  branch     Branch?  @relation(fields: [branchId], references: [id])
+  action     String
+  entityType String
+  entityId   String?
+  summary    String
+  metadata   Json?
+
+  @@index([branchId, at])
+  @@index([entityType, entityId])
+  @@index([at])
 }

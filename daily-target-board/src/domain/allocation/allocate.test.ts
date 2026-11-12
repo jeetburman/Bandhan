@@ -4,7 +4,7 @@ import {
   type AllocationInput,
   type AllocationMetric,
   type BranchTargetEntry,
-} from "./allocation";
+} from "./allocate";
 
 const METRICS: AllocationMetric[] = [
   { id: "FD", scope: "INDIVIDUAL" },

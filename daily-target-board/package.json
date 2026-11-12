@@ -9,10 +9,18 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
-    "db:seed:catalog": "tsx prisma/seed-catalog.ts"
+    "db:seed:catalog": "tsx prisma/seed-catalog.ts",
+    "db:seed:users": "tsx prisma/seed.ts",
+    "db:seed:nov": "tsx prisma/seed-nov-2026.ts",
+    "plan:show": "tsx scripts/show-plan.ts",
+    "plan:publish": "tsx scripts/publish-plan.ts",
+    "plan:saved": "tsx scripts/saved-plan.ts",
+    "plan:backfill-holidays": "tsx scripts/backfill-plan-holidays.ts",
+    "holiday": "tsx scripts/holiday.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
+    "bcryptjs": "^3.0.3",
     "next": "16.4.6",
     "react": "19.3.0",
     "react-dom": "19.3.0"
