@@ -5,6 +5,7 @@ const prisma = new PrismaClient();
 
 // Synthetic data only. Never reuse a real password here.
 const DEMO_PASSWORD = "Demo@12345";
+const CLUSTER_NAME = "Park Street Cluster";
 
 const DESIGNATIONS = [
   { code: "CLUSTER_HEAD", name: "Cluster Head", role: Role.CLUSTER_HEAD, requiresVerification: false },
@@ -19,9 +20,14 @@ const DESIGNATIONS = [
 
 // Headcount varies by branch, like a real cluster.
 const BRANCHES = [
-  { code: "B01", name: "Demo Branch 1", abh: 2, se: 4, cro: 4, arm: 2 },
-  { code: "B02", name: "Demo Branch 2", abh: 1, se: 3, cro: 3, arm: 1 },
-  { code: "B03", name: "Demo Branch 3", abh: 2, se: 3, cro: 4, arm: 2 },
+  { code: "B01", name: "Jodu Babu Bazaar", abh: 2, se: 4, cro: 4, arm: 2 },
+  { code: "B02", name: "Sealdah", abh: 1, se: 3, cro: 3, arm: 1 },
+  { code: "B03", name: "Topsia", abh: 2, se: 3, cro: 4, arm: 2 },
+  { code: "B04", name: "CIT Road", abh: 1, se: 3, cro: 3, arm: 1 },
+  { code: "B05", name: "Sarat Bose Road", abh: 2, se: 3, cro: 3, arm: 2 },
+  { code: "B06", name: "Park Street", abh: 2, se: 4, cro: 4, arm: 2 },
+  { code: "B07", name: "Bhawanipore", abh: 2, se: 4, cro: 4, arm: 2 },
+  { code: "B08", name: "Shakespeare Sarani", abh: 1, se: 3, cro: 3, arm: 1 },
 ];
 
 const designationIds = new Map<string, string>();
@@ -35,10 +41,14 @@ function idOf(code: string): string {
 async function main() {
   const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 10);
 
-  const cluster = await prisma.cluster.upsert({
+  await prisma.cluster.updateMany({
     where: { name: "Demo Cluster" },
+    data: { name: CLUSTER_NAME },
+  });
+  const cluster = await prisma.cluster.upsert({
+    where: { name: CLUSTER_NAME },
     update: {},
-    create: { name: "Demo Cluster" },
+    create: { name: CLUSTER_NAME },
   });
 
   for (const d of DESIGNATIONS) {

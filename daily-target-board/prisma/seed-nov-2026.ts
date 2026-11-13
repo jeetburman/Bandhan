@@ -70,7 +70,9 @@ const QUOTAS: Record<string, Quotas> = {
 };
 
 // The Cluster Head's Affluent Legacy target is per branch, not per person.
-const LEGACY_TARGETS: Record<string, number | undefined> = { B01: 8, B02: 4, B03: 6 };
+const LEGACY_TARGETS: Record<string, number | undefined> = {
+  B01: 8, B02: 4, B03: 6, B04: 4, B05: 5, B06: 10, B07: 8, B08: 4,
+};
 
 // Branch targets start as the sum of the quotas. These nudges make one branch
 // deliberately disagree, so the mismatch warning has something to show.
@@ -82,7 +84,7 @@ const HOLIDAYS = [
 ];
 
 async function main() {
-  const cluster = await prisma.cluster.findUnique({ where: { name: "Demo Cluster" } });
+  const cluster = await prisma.cluster.findUnique({ where: { name: "Park Street Cluster" } });
   if (!cluster) throw new Error("Demo Cluster not found. Run: npm run db:seed:users");
 
   const clusterHead = await prisma.user.findUnique({ where: { email: "ch@demo.local" } });

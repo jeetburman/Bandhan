@@ -1,4 +1,5 @@
-export type Role = "STAFF" | "SUPERVISOR" | "BRANCH_MANAGER" | "CLUSTER_HEAD";
+import type { Role } from "../lib/roles";
+export type { Role };
 
 export interface Actor {
   id: string;
