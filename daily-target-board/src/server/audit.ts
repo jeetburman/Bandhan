@@ -1,6 +1,14 @@
 import type { Prisma } from "@prisma/client";
 
-export type AuditAction = "PLAN_PUBLISHED" | "HOLIDAY_ADDED" | "HOLIDAY_REMOVED";
+export type AuditAction =
+  | "PLAN_PUBLISHED"
+  | "HOLIDAY_ADDED"
+  | "HOLIDAY_REMOVED"
+  | "ENTRY_SUBMITTED"
+  | "ENTRY_AUTO_VERIFIED"
+  | "ENTRY_APPROVED"
+  | "ENTRY_VERIFIED"
+  | "ENTRY_REJECTED";
 
 export interface AuditEntry {
   actorId: string | null;

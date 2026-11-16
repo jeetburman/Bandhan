@@ -32,14 +32,15 @@ model Cluster {
 }
 
 model Branch {
-  id           String         @id @default(cuid())
-  code         String         @unique
+  id           String          @id @default(cuid())
+  code         String          @unique
   name         String
   clusterId    String
-  cluster      Cluster        @relation(fields: [clusterId], references: [id])
+  cluster      Cluster         @relation(fields: [clusterId], references: [id])
   users        User[]
   holidays     Holiday[]
-  createdAt    DateTime       @default(now())
+  entries      ProgressEntry[]
+  createdAt    DateTime        @default(now())
   BranchTarget BranchTarget[]
   TargetPlan   TargetPlan[]
   BranchSlice  BranchSlice[]
@@ -59,13 +60,15 @@ model Designation {
 }
 
 model User {
-  id              String    @id @default(cuid())
+  id              String          @id @default(cuid())
   name            String
-  email           String    @unique
+  email           String          @unique
   passwordHash    String
   holidaysAdded   Holiday[]
-  isActive        Boolean   @default(true)
-  isBranchContact Boolean   @default(false) // true for the BH only
+  entries         ProgressEntry[] @relation("EntrySeller")
+  reviews         Approval[]      @relation("EntryReviewer")
+  isActive        Boolean         @default(true)
+  isBranchContact Boolean         @default(false) // true for the BH only
 
   plansCreated   TargetPlan[] @relation("PlanCreator")
   plansPublished TargetPlan[] @relation("PlanPublisher")
@@ -121,6 +124,7 @@ model Metric {
   name             String
   unit             MetricUnit
   scope            MetricScope        @default(INDIVIDUAL)
+  entryCredits     EntryCredit[]
   pacing           Pacing
   sortOrder        Int                @default(0)
   isActive         Boolean            @default(true)
@@ -149,6 +153,7 @@ model Product {
   name         String
   categoryId   String
   category     ProductCategory      @relation(fields: [categoryId], references: [id])
+  entries      ProgressEntry[]
   sortOrder    Int                  @default(0)
   isActive     Boolean              @default(true)
   optionGroups ProductOptionGroup[]
@@ -410,4 +415,81 @@ model AuditLog {
   @@index([branchId, at])
   @@index([entityType, entityId])
   @@index([at])
+}
+
+// ---------- Progress ----------
+
+enum EntryStatus {
+  SUBMITTED // waiting for a reviewer
+  L1_APPROVED // a supervisor approved it, waiting for final verification
+  VERIFIED // counts towards progress
+  REJECTED // never counts
+}
+
+enum ApprovalLevel {
+  FIRST // a supervisor's provisional approval
+  FINAL // the branch manager's verification
+}
+
+enum ApprovalDecision {
+  APPROVED
+  REJECTED
+}
+
+// One sale recorded by an employee.
+model ProgressEntry {
+  id              String        @id @default(cuid())
+  branchId        String // the branch where it was sold. Isolation is built on this.
+  branch          Branch        @relation(fields: [branchId], references: [id])
+  userId          String
+  user            User          @relation("EntrySeller", fields: [userId], references: [id])
+  productId       String
+  product         Product       @relation(fields: [productId], references: [id])
+  productName     String // snapshot, so history survives a rename
+  optionSummary   String? // snapshot, e.g. "Variant: Elite · Source: Renewal"
+  selectedOptions Json?
+  activityDate    String        @db.VarChar(10) // "YYYY-MM-DD"
+  units           Int
+  amountPaise     BigInt        @default(0)
+  reference       String?
+  note            String?
+  status          EntryStatus
+  autoVerified    Boolean       @default(false)
+  submittedAt     DateTime      @default(now())
+  decidedAt       DateTime?
+  rejectionReason String?
+  isDemo          Boolean       @default(false)
+  credits         EntryCredit[]
+  approvals       Approval[]
+
+  @@index([branchId, status])
+  @@index([userId, activityDate])
+  @@index([activityDate])
+}
+
+// What the sale was worth to each metric, fixed at submission.
+model EntryCredit {
+  id       String        @id @default(cuid())
+  entryId  String
+  entry    ProgressEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  metricId String
+  metric   Metric        @relation(fields: [metricId], references: [id])
+  quantity BigInt
+
+  @@unique([entryId, metricId])
+  @@index([metricId])
+}
+
+model Approval {
+  id       String           @id @default(cuid())
+  entryId  String
+  entry    ProgressEntry    @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  level    ApprovalLevel
+  decision ApprovalDecision
+  byId     String
+  by       User             @relation("EntryReviewer", fields: [byId], references: [id])
+  reason   String?
+  at       DateTime         @default(now())
+
+  @@index([entryId])
 }

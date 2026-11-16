@@ -1,18 +1,14 @@
 export type Role = "STAFF" | "SUPERVISOR" | "BRANCH_MANAGER" | "CLUSTER_HEAD";
-export type Section = "me" | "team" | "branch" | "cluster";
+export type Section = "me" | "team" | "branch" | "cluster" | "approvals";
 
-const RANK: Record<Role, number> = {
-  STAFF: 0,
-  SUPERVISOR: 1,
-  BRANCH_MANAGER: 2,
-  CLUSTER_HEAD: 3,
-};
-
-const MIN_ROLE_FOR: Record<Section, Role> = {
-  me: "STAFF",
-  team: "SUPERVISOR",
-  branch: "BRANCH_MANAGER",
-  cluster: "CLUSTER_HEAD",
+const ALLOWED: Record<Section, readonly Role[]> = {
+  // Everyone who sells. The Cluster Head has no personal targets and records no sales.
+  me: ["STAFF", "SUPERVISOR", "BRANCH_MANAGER"],
+  team: ["SUPERVISOR", "BRANCH_MANAGER", "CLUSTER_HEAD"],
+  branch: ["BRANCH_MANAGER", "CLUSTER_HEAD"],
+  cluster: ["CLUSTER_HEAD"],
+  // Approval requests never go to the Cluster Head.
+  approvals: ["SUPERVISOR", "BRANCH_MANAGER"],
 };
 
 const HOME: Record<Role, string> = {
@@ -29,9 +25,8 @@ const LABELS: Record<Role, string> = {
   CLUSTER_HEAD: "Cluster head",
 };
 
-/** A role can open its own section and every section below it. */
 export function canAccessSection(role: Role, section: Section): boolean {
-  return RANK[role] >= RANK[MIN_ROLE_FOR[section]];
+  return ALLOWED[section].includes(role);
 }
 
 export function homePathFor(role: Role): string {
