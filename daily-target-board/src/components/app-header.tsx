@@ -25,9 +25,10 @@ export function AppHeader({ actor }: { actor: Actor }) {
           </button>
         </form>
       </div>
-      <nav className="mt-2 flex gap-4 text-sm">
+      <nav className="mt-2 flex flex-wrap gap-4 text-sm">
         {home !== "/me" ? <Link href={home}>Home</Link> : null}
-        {sells ? <Link href="/me">My sales</Link> : null}
+        {sells ? <Link href="/me">My targets</Link> : null}
+        {sells ? <Link href="/me/sales">My sales</Link> : null}
         <Suspense fallback={null}>
           <ApprovalsLink actor={actor} />
         </Suspense>

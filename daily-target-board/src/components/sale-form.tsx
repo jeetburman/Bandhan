@@ -1,44 +1,11 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import type { FormCategory, FormOption } from "@/server/catalog";
+import type { FormCategory } from "@/server/catalog";
 import { submitSaleAction } from "@/server/entry-actions";
+import { Picker, type PickerOption } from "./picker";
 
 const FIELD = "mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm";
-
-/** Options grouped under their section headings (Retail, Salary, NRI...) when they have them. */
-function OptionList({ options }: { options: FormOption[] }) {
-  const sections: string[] = [];
-  for (const option of options) {
-    if (option.section && !sections.includes(option.section)) sections.push(option.section);
-  }
-  if (sections.length === 0) {
-    return (
-      <>
-        {options.map((option) => (
-          <option key={option.code} value={option.code}>
-            {option.name}
-          </option>
-        ))}
-      </>
-    );
-  }
-  return (
-    <>
-      {sections.map((section) => (
-        <optgroup key={section} label={section}>
-          {options
-            .filter((option) => option.section === section)
-            .map((option) => (
-              <option key={option.code} value={option.code}>
-                {option.name}
-              </option>
-            ))}
-        </optgroup>
-      ))}
-    </>
-  );
-}
 
 export function SaleForm({
   catalog,
@@ -50,41 +17,48 @@ export function SaleForm({
   minDate: string;
 }) {
   const [state, formAction, pending] = useActionState(submitSaleAction, { error: null });
+
+  // Everything is held in state, so a mistake never wipes what was typed.
   const [productCode, setProductCode] = useState("");
+  const [selected, setSelected] = useState<Record<string, string>>({});
+  const [units, setUnits] = useState("1");
+  const [amount, setAmount] = useState("");
+  const [activityDate, setActivityDate] = useState(today);
+  const [reference, setReference] = useState("");
+  const [note, setNote] = useState("");
+
+  const productOptions: PickerOption[] = catalog.flatMap((category) =>
+    category.products.map((p) => ({ value: p.code, label: p.name, section: category.name })),
+  );
   const product = catalog.flatMap((category) => category.products).find((p) => p.code === productCode);
+
+  const missingOption = product ? product.groups.some((g) => g.isRequired && !selected[g.code]) : true;
+  const missingAmount = product?.needsAmount ? amount.trim() === "" : false;
+  const canSubmit = !pending && product !== undefined && !missingOption && !missingAmount;
 
   return (
     <form action={formAction} className="space-y-4">
-      <label className="block text-sm font-medium">
-        Product
-        <select
-          name="productCode"
-          required
-          value={productCode}
-          onChange={(event) => setProductCode(event.target.value)}
-          className={FIELD}
-        >
-          <option value="">Choose a product</option>
-          {catalog.map((category) => (
-            <optgroup key={category.code} label={category.name}>
-              {category.products.map((p) => (
-                <option key={p.code} value={p.code}>
-                  {p.name}
-                </option>
-              ))}
-            </optgroup>
-          ))}
-        </select>
-      </label>
+      <Picker
+        label="Product"
+        name="productCode"
+        options={productOptions}
+        value={productCode}
+        onChange={(code) => {
+          setProductCode(code);
+          setSelected({});
+        }}
+        placeholder="Choose a product"
+      />
 
       {product?.groups.map((group) => (
-        <label key={`${product.code}-${group.code}`} className="block text-sm font-medium">
-          {group.name}
-          <select name={`opt_${group.code}`} required={group.isRequired} defaultValue="" className={FIELD}>
-            <option value="">Choose…</option>
-            <OptionList options={group.options} />
-          </select>
-        </label>
+        <Picker
+          key={`${product.code}-${group.code}`}
+          label={group.name}
+          name={`opt_${group.code}`}
+          options={group.options.map((o) => ({ value: o.code, label: o.name, section: o.section }))}
+          value={selected[group.code] ?? ""}
+          onChange={(code) => setSelected((previous) => ({ ...previous, [group.code]: code }))}
+        />
       ))}
 
       {product ? (
@@ -92,12 +66,13 @@ export function SaleForm({
           <label className="block text-sm font-medium">
             Number sold
             <input
-              key={`${product.code}-units`}
               name="units"
               type="number"
+              inputMode="numeric"
               min={1}
               max={999}
-              defaultValue={1}
+              value={units}
+              onChange={(event) => setUnits(event.target.value)}
               required
               className={FIELD}
             />
@@ -112,9 +87,10 @@ export function SaleForm({
           <label className="block text-sm font-medium">
             Amount (₹)
             <input
-              key={`${product.code}-amount`}
               name="amount"
               inputMode="decimal"
+              value={amount}
+              onChange={(event) => setAmount(event.target.value)}
               required
               placeholder="e.g. 50,000"
               className={FIELD}
@@ -133,7 +109,8 @@ export function SaleForm({
         <input
           name="activityDate"
           type="date"
-          defaultValue={today}
+          value={activityDate}
+          onChange={(event) => setActivityDate(event.target.value)}
           min={minDate}
           max={today}
           required
@@ -146,17 +123,26 @@ export function SaleForm({
         <input
           name="reference"
           maxLength={40}
+          value={reference}
+          onChange={(event) => setReference(event.target.value)}
           placeholder="An application or request number"
           className={FIELD}
         />
         <span className="mt-1 block text-xs font-normal text-slate-500">
-          Never enter a customer's name or ID here.
+          Never enter a customer&apos;s name or ID here.
         </span>
       </label>
 
       <label className="block text-sm font-medium">
         Note (optional)
-        <textarea name="note" maxLength={200} rows={2} className={FIELD} />
+        <textarea
+          name="note"
+          maxLength={200}
+          rows={2}
+          value={note}
+          onChange={(event) => setNote(event.target.value)}
+          className={FIELD}
+        />
       </label>
 
       {state.error ? (
@@ -167,7 +153,7 @@ export function SaleForm({
 
       <button
         type="submit"
-        disabled={pending}
+        disabled={!canSubmit}
         className="w-full rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
       >
         {pending ? "Saving…" : "Record sale"}

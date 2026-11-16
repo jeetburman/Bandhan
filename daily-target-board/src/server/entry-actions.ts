@@ -70,8 +70,9 @@ export async function submitSaleAction(
   }
 
   revalidatePath("/me");
+  revalidatePath("/me/sales");
   revalidatePath("/approvals");
-  redirect("/me");
+  redirect("/me/sales");
 }
 
 const reviewSchema = z.object({
@@ -106,7 +107,8 @@ export async function reviewEntryAction(
     return { error: "Something went wrong. Please try again." };
   }
 
-  revalidatePath("/approvals");
-  revalidatePath("/me");
-  return { error: null };
+    revalidatePath("/approvals");
+    revalidatePath("/me");
+    revalidatePath("/me/sales");
+    return { error: null };
 }

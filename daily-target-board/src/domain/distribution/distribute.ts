@@ -37,7 +37,7 @@ export function distribute(total: number, weights: readonly number[]): number[] 
   const remainders: number[] = [];
   let assigned = 0;
 
-  weights.forEach((weight, i) => {
+  weights.forEach((weight) => {
     const numerator = total * weight;
     if (!Number.isSafeInteger(numerator)) {
       throw new Error("Total is too large to distribute exactly");

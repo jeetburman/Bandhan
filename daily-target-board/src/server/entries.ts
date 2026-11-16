@@ -255,14 +255,33 @@ export async function listMyEntries(actor: Actor, limit = 30): Promise<EntryView
   return rows.map(toView);
 }
 
-/** Entries waiting for this person to review, oldest first. Empty for roles with no queue. */
-export async function listQueue(actor: Actor): Promise<QueueItem[]> {
-  const where = queueWhere(actor);
-  if (!where) return [];
+export type QueueOrder = "newest" | "oldest";
+
+export interface QueueSeller {
+  userId: string;
+  name: string;
+  designation: string;
+  count: number;
+}
+
+/**
+ * Entries waiting for this person to review. Empty for roles with no queue.
+ * A seller filter narrows the list, and it can never widen it: the person's own queue rule
+ * is always applied first.
+ */
+export async function listQueue(
+  actor: Actor,
+  options: { order?: QueueOrder; sellerId?: string } = {},
+): Promise<QueueItem[]> {
+  const base = queueWhere(actor);
+  if (!base) return [];
+  const where: Prisma.ProgressEntryWhereInput = options.sellerId
+    ? { AND: [base, { userId: options.sellerId }] }
+    : base;
 
   const rows = await db.progressEntry.findMany({
     where,
-    orderBy: { submittedAt: "asc" },
+    orderBy: { submittedAt: options.order === "oldest" ? "asc" : "desc" },
     take: 100,
     include: { user: { include: { designation: true } } },
   });
@@ -284,6 +303,34 @@ export async function listQueue(actor: Actor): Promise<QueueItem[]> {
     });
   }
   return items;
+}
+
+/** Who has requests waiting for this person, with how many each. */
+export async function listQueueSellers(actor: Actor): Promise<QueueSeller[]> {
+  const where = queueWhere(actor);
+  if (!where) return [];
+
+  const groups = await db.progressEntry.groupBy({
+    by: ["userId"],
+    where,
+    _count: { _all: true },
+  });
+  if (groups.length === 0) return [];
+
+  const users = await db.user.findMany({
+    where: { id: { in: groups.map((g) => g.userId) } },
+    include: { designation: true },
+  });
+  const byId = new Map(users.map((u) => [u.id, u]));
+
+  return groups
+    .map((g) => ({
+      userId: g.userId,
+      name: byId.get(g.userId)?.name ?? "Unknown",
+      designation: byId.get(g.userId)?.designation.name ?? "",
+      count: g._count._all,
+    }))
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
 }
 
 /** How many entries are waiting for this person, or null if their role has no queue. */
