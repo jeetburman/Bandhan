@@ -20,6 +20,7 @@ export function ReviewControls({ entryId, level }: { entryId: string; level: "FI
           {state.error}
         </p>
       ) : null}
+      {pending ? <p className="text-xs text-slate-500">Saving… this can take a few seconds.</p> : null}
       <div className="flex gap-2">
         <button
           type="submit"

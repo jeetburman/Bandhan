@@ -1,10 +1,13 @@
 import type { Prisma } from "@prisma/client";
+import type { Role } from "../lib/roles";
 import type { Actor } from "./permissions";
 
 export type VisibilityScope =
   | { kind: "SELF"; userId: string }
   | { kind: "TEAM"; userId: string }
-  | { kind: "BRANCH"; branchId: string }
+  // seeManagers is true for the Branch Head only. An ABH sees the rest of the branch and
+  // themselves, but not the Branch Head or the other ABHs.
+  | { kind: "BRANCH"; branchId: string; userId: string; seeManagers: boolean }
   | { kind: "CLUSTER"; clusterId: string };
 
 export interface ScopeTarget {
@@ -12,9 +15,10 @@ export interface ScopeTarget {
   clusterId: string;
   branchId: string | null;
   reportsToId: string | null;
+  role: Role;
 }
 
-type ScopeActor = Pick<Actor, "id" | "role" | "clusterId" | "branchId">;
+type ScopeActor = Pick<Actor, "id" | "role" | "clusterId" | "branchId" | "isBranchContact">;
 
 /**
  * How much of the organisation this person may see.
@@ -26,7 +30,12 @@ export function visibilityScope(actor: ScopeActor): VisibilityScope {
       return { kind: "CLUSTER", clusterId: actor.clusterId };
     case "BRANCH_MANAGER":
       return actor.branchId
-        ? { kind: "BRANCH", branchId: actor.branchId }
+        ? {
+            kind: "BRANCH",
+            branchId: actor.branchId,
+            userId: actor.id,
+            seeManagers: actor.isBranchContact,
+          }
         : { kind: "SELF", userId: actor.id };
     case "SUPERVISOR":
       return { kind: "TEAM", userId: actor.id };
@@ -43,7 +52,9 @@ export function matchesScope(scope: VisibilityScope, target: ScopeTarget): boole
     case "TEAM":
       return target.id === scope.userId || target.reportsToId === scope.userId;
     case "BRANCH":
-      return target.branchId === scope.branchId;
+      if (target.branchId !== scope.branchId) return false;
+      if (scope.seeManagers) return true;
+      return target.id === scope.userId || target.role !== "BRANCH_MANAGER";
     case "CLUSTER":
       return target.clusterId === scope.clusterId;
   }
@@ -61,11 +72,17 @@ export function userWhere(scope: VisibilityScope): Prisma.UserWhereInput {
     case "TEAM":
       return { OR: [{ id: scope.userId }, { reportsToId: scope.userId }] };
     case "BRANCH":
-      return { branchId: scope.branchId };
+      return scope.seeManagers
+        ? { branchId: scope.branchId }
+        : {
+            branchId: scope.branchId,
+            OR: [{ id: scope.userId }, { designation: { role: { not: "BRANCH_MANAGER" } } }],
+          };
     case "CLUSTER":
       return { clusterId: scope.clusterId };
   }
 }
+
 /**
  * The Cluster Head can open any branch in their cluster. A branch manager can open only
  * their own branch. Supervisors and staff see people, never branch-level figures.

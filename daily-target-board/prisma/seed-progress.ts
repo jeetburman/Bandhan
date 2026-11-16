@@ -295,6 +295,71 @@ async function main() {
   await insertInChunks(credits, (data) => db.entryCredit.createMany({ data }));
   await insertInChunks(approvals, (data) => db.approval.createMany({ data }));
 
+
+    // Make sure the demo shows every chip: each seller with several sales has at least one
+  // waiting sale, and a few named accounts have one rejected sale with a reason.
+  const reviewerByBranch = new Map<string, string>();
+  for (const b of branches) {
+    const head = await db.user.findFirst({ where: { branchId: b.id, isBranchContact: true } });
+    if (head) reviewerByBranch.set(b.id, head.id);
+  }
+
+  const demoRows = await db.progressEntry.findMany({
+    where: { isDemo: true, user: { designation: { requiresVerification: true } } },
+    select: {
+      id: true,
+      userId: true,
+      branchId: true,
+      status: true,
+      user: { select: { email: true } },
+    },
+    orderBy: [{ userId: "asc" }, { activityDate: "desc" }, { id: "asc" }],
+  });
+  const byUser = new Map<string, typeof demoRows>();
+  for (const row of demoRows) {
+    const list = byUser.get(row.userId) ?? [];
+    list.push(row);
+    byUser.set(row.userId, list);
+  }
+
+  let fixedWaiting = 0;
+  let fixedRejected = 0;
+  for (const list of byUser.values()) {
+    if (list.length < 3) continue;
+
+    if (!list.some((row) => row.status === "SUBMITTED" || row.status === "L1_APPROVED")) {
+      const target = list.find((row) => row.status === "VERIFIED"); // the newest one
+      if (target) {
+        await db.approval.deleteMany({ where: { entryId: target.id } });
+        await db.progressEntry.update({
+          where: { id: target.id },
+          data: { status: "SUBMITTED", decidedAt: null, rejectionReason: null },
+        });
+        target.status = "SUBMITTED";
+        fixedWaiting++;
+      }
+    }
+
+    if (/^(cro1|se1|arm1)\./.test(list[0].user.email) && !list.some((row) => row.status === "REJECTED")) {
+      const target = [...list].reverse().find((row) => row.status === "VERIFIED"); // the oldest one
+      const reviewerId = reviewerByBranch.get(list[0].branchId);
+      if (target && reviewerId) {
+        const reason = "Reference number missing";
+        await db.approval.deleteMany({ where: { entryId: target.id } });
+        await db.progressEntry.update({
+          where: { id: target.id },
+          data: { status: "REJECTED", rejectionReason: reason },
+        });
+        await db.approval.create({
+          data: { entryId: target.id, level: "FINAL", decision: "REJECTED", byId: reviewerId, reason },
+        });
+        target.status = "REJECTED";
+        fixedRejected++;
+      }
+    }
+  }
+  console.log(`Demo touch-ups: ${fixedWaiting} waiting sales and ${fixedRejected} rejected sales added.`);
+
   const byStatus = await db.progressEntry.groupBy({
     by: ["status"],
     where: { isDemo: true },

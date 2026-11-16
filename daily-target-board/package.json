@@ -17,7 +17,8 @@
     "plan:saved": "tsx scripts/saved-plan.ts",
     "plan:backfill-holidays": "tsx scripts/backfill-plan-holidays.ts",
     "holiday": "tsx scripts/holiday.ts",
-    "db:seed:progress": "tsx prisma/seed-progress.ts"
+    "db:seed:progress": "tsx prisma/seed-progress.ts",
+    "plan:publish-all": "tsx scripts/publish-all-plans.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

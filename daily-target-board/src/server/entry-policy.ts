@@ -59,3 +59,16 @@ export function queueWhere(actor: PolicyActor): Prisma.ProgressEntryWhereInput |
   }
   return null;
 }
+
+/**
+ * The reviews this person may look back on. A branch manager sees every review made in their
+ * branch, and a supervisor sees reviews of their own reports. null means no approvals section.
+ */
+export function handledWhere(actor: PolicyActor): Prisma.ApprovalWhereInput | null {
+  if (actor.branchId === null) return null;
+  if (actor.role === "BRANCH_MANAGER") return { entry: { branchId: actor.branchId } };
+  if (actor.role === "SUPERVISOR") {
+    return { entry: { branchId: actor.branchId, user: { reportsToId: actor.id } } };
+  }
+  return null;
+}

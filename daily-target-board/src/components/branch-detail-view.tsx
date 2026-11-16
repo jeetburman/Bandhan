@@ -16,6 +16,8 @@ function FigureRow({ figure }: { figure: Figure }) {
 }
 
 export function BranchDetailView({ detail }: { detail: BranchDetail }) {
+  const hasPlan = detail.planVersion !== null;
+
   return (
     <div className="mt-4">
       <div className="flex items-start justify-between gap-3">
@@ -28,7 +30,7 @@ export function BranchDetailView({ detail }: { detail: BranchDetail }) {
         <PlanChip version={detail.planVersion} stale={detail.planStale} />
       </div>
 
-      {detail.planVersion === null ? (
+      {!hasPlan ? (
         <p className="mt-4 rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600">
           No plan has been published for this branch this month yet.
         </p>
@@ -45,7 +47,7 @@ export function BranchDetailView({ detail }: { detail: BranchDetail }) {
             <h2 className="text-sm font-semibold">Branch totals</h2>
             <p className="text-xs text-slate-500">
               What has fallen due by today, out of the monthly target. Achieved figures arrive
-              with progress entries.
+              with the dashboard.
             </p>
             <div className="mt-2 divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white px-4">
               {detail.totals.map((f) => (
@@ -64,31 +66,33 @@ export function BranchDetailView({ detail }: { detail: BranchDetail }) {
               </div>
             </section>
           ) : null}
-
-          <section className="mt-6">
-            <h2 className="text-sm font-semibold">Employees ({detail.employees.length})</h2>
-            <ul className="mt-2 space-y-2">
-              {detail.employees.map((employee) => (
-                <li key={employee.userId}>
-                  <details className="rounded-xl border border-slate-200 bg-white">
-                    <summary className="cursor-pointer px-4 py-3">
-                      <span className="text-sm font-medium">{employee.name}</span>
-                      <span className="ml-2 text-xs text-slate-500">{employee.designation}</span>
-                    </summary>
-                    <div className="divide-y divide-slate-100 border-t border-slate-100 px-4">
-                      {employee.figures.length === 0 ? (
-                        <p className="py-3 text-sm text-slate-500">No personal targets.</p>
-                      ) : (
-                        employee.figures.map((f) => <FigureRow key={f.metricId} figure={f} />)
-                      )}
-                    </div>
-                  </details>
-                </li>
-              ))}
-            </ul>
-          </section>
         </>
       )}
+
+      <section className="mt-6">
+        <h2 className="text-sm font-semibold">Employees ({detail.employees.length})</h2>
+        <ul className="mt-2 space-y-2">
+          {detail.employees.map((employee) => (
+            <li key={employee.userId}>
+              <details className="rounded-xl border border-slate-200 bg-white">
+                <summary className="cursor-pointer px-4 py-3">
+                  <span className="text-sm font-medium">{employee.name}</span>
+                  <span className="ml-2 text-xs text-slate-500">{employee.designation}</span>
+                </summary>
+                <div className="divide-y divide-slate-100 border-t border-slate-100 px-4">
+                  {employee.figures.length === 0 ? (
+                    <p className="py-3 text-sm text-slate-500">
+                      {hasPlan ? "No personal targets." : "No plan published yet."}
+                    </p>
+                  ) : (
+                    employee.figures.map((f) => <FigureRow key={f.metricId} figure={f} />)
+                  )}
+                </div>
+              </details>
+            </li>
+          ))}
+        </ul>
+      </section>
     </div>
   );
 }

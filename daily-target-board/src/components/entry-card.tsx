@@ -18,8 +18,9 @@ export function EntryCard({
       <div className="flex items-start justify-between gap-3">
         <div>
           {seller ? (
-            <p className="text-xs text-slate-500">
-              {seller.name} · {seller.designation}
+            <p className="text-sm font-semibold">
+              {seller.name}
+              <span className="ml-2 text-xs font-normal text-slate-500">{seller.designation}</span>
             </p>
           ) : null}
           <p className="text-sm font-medium">{entry.productName}</p>

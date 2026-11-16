@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Role } from "../lib/roles";
 import type { EntryStatus } from "../domain/entries/workflow";
-import { canSubmitEntry, isInQueue, queueWhere, reviewLevelFor } from "./entry-policy";
+import { canSubmitEntry, handledWhere, isInQueue, queueWhere, reviewLevelFor } from "./entry-policy";
 
 const actor = (id: string, role: Role, branchId: string | null) => ({ id, role, branchId });
 
@@ -137,5 +137,23 @@ describe("canSubmitEntry", () => {
 
   it("refuses anyone without a branch", () => {
     expect(canSubmitEntry({ role: "STAFF", branchId: null })).toBe(false);
+  });
+});
+
+describe("handledWhere", () => {
+  it("shows a branch manager the reviews made in their own branch only", () => {
+    expect(handledWhere(BH1)).toEqual({ entry: { branchId: "b1" } });
+    expect(handledWhere(ABH1)).toEqual({ entry: { branchId: "b1" } });
+    expect(handledWhere(BH2)).toEqual({ entry: { branchId: "b2" } });
+  });
+
+  it("shows a supervisor reviews of their own reports in their own branch", () => {
+    expect(handledWhere(SM1)).toEqual({ entry: { branchId: "b1", user: { reportsToId: "sm1" } } });
+  });
+
+  it("gives the Cluster Head, staff and a branchless manager no history", () => {
+    expect(handledWhere(CH)).toBeNull();
+    expect(handledWhere(CRO1)).toBeNull();
+    expect(handledWhere(actor("x", "BRANCH_MANAGER", null))).toBeNull();
   });
 });

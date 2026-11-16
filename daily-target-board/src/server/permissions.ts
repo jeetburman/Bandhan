@@ -8,6 +8,8 @@ export interface Actor {
   role: Role;
   clusterId: string;
   branchId: string | null;
+  /** True for the Branch Head, the branch's first point of contact. The ABH has the same role but not this flag. */
+  isBranchContact: boolean;
 }
 
 /** Only a branch manager (BH or ABH) of that very branch can publish its plan. */

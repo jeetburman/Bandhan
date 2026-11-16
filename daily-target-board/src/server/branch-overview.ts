@@ -3,7 +3,7 @@ import { calendarDrift } from "../domain/planning/drift";
 import { db } from "../lib/db";
 import { qtyFromDb } from "../lib/qty";
 import type { Actor } from "./permissions";
-import { canViewBranch } from "./policy";
+import { canViewBranch, matchesScope, visibilityScope } from "./policy";
 
 export interface PickerBranch {
   code: string;
@@ -234,7 +234,21 @@ export async function loadBranchDetail(
   const planStale = plan
     ? calendarDrift(plan.holidayDates, holidays.map((h) => h.date)).stale
     : false;
-
+    // Totals above include everyone. The list below shows only the people this person may see.
+  const scope = visibilityScope(actor);
+  const visibleIds = new Set(
+    employees
+      .filter((employee) =>
+        matchesScope(scope, {
+          id: employee.id,
+          clusterId: employee.clusterId,
+          branchId: employee.branchId,
+          reportsToId: employee.reportsToId,
+          role: employee.designation.role,
+        }),
+      )
+      .map((employee) => employee.id),
+  );
   return {
     branch: { code: branch.code, name: branch.name },
     month,
@@ -243,6 +257,17 @@ export async function loadBranchDetail(
     planStale,
     totals,
     branchWide,
-    employees: employeeFigures,
+    employees: employeeFigures.filter((employee) => visibleIds.has(employee.userId)),
   };
+}
+
+/** A branch manager's own branch, for the home screen. */
+export async function loadOwnBranchDetail(
+  actor: Actor,
+  month: string,
+  today: string,
+): Promise<BranchDetail | null> {
+  if (!actor.branchId) return null;
+  const branch = await db.branch.findUnique({ where: { id: actor.branchId } });
+  return branch ? loadBranchDetail(actor, branch.code, month, today) : null;
 }

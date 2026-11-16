@@ -10,6 +10,7 @@ function toActor(user: User & { designation: Designation }): Actor {
     role: user.designation.role,
     clusterId: user.clusterId,
     branchId: user.branchId,
+    isBranchContact: user.isBranchContact,
   };
 }
 

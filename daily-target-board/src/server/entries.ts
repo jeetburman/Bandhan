@@ -14,7 +14,7 @@ import { formatRupees } from "../lib/money";
 import { qtyFromDb, qtyToDb } from "../lib/qty";
 import { writeAudit } from "./audit";
 import { loadCatalogProduct, summariseOptions } from "./catalog";
-import { canSubmitEntry, queueWhere, reviewLevelFor } from "./entry-policy";
+import { canSubmitEntry, handledWhere, queueWhere, reviewLevelFor } from "./entry-policy";
 import { UserFacingError } from "./errors";
 import type { Actor } from "./permissions";
 
@@ -293,3 +293,40 @@ export async function countQueue(actor: Actor): Promise<number | null> {
 }
 
 export { formatRupees };
+
+export interface HandledItem {
+  approvalId: string;
+  entry: EntryView;
+  sellerName: string;
+  sellerDesignation: string;
+  level: ReviewLevel;
+  decision: "APPROVED" | "REJECTED";
+  reviewerName: string;
+  at: Date;
+  reason: string | null;
+}
+
+/** Recent approve and reject decisions this person is allowed to look back on. */
+export async function listHandled(actor: Actor, limit = 15): Promise<HandledItem[]> {
+  const where = handledWhere(actor);
+  if (!where) return [];
+
+  const rows = await db.approval.findMany({
+    where,
+    orderBy: { at: "desc" },
+    take: limit,
+    include: { by: true, entry: { include: { user: { include: { designation: true } } } } },
+  });
+
+  return rows.map((row) => ({
+    approvalId: row.id,
+    entry: toView(row.entry),
+    sellerName: row.entry.user.name,
+    sellerDesignation: row.entry.user.designation.name,
+    level: row.level,
+    decision: row.decision,
+    reviewerName: row.by.name,
+    at: row.at,
+    reason: row.reason,
+  }));
+}
