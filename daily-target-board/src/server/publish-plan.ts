@@ -23,6 +23,15 @@ export interface ExtraInput {
   note?: string;
 }
 
+export interface TotalInput {
+  /** The employee's email. */
+  email: string;
+  metricCode: string;
+  /** The new monthly total for this person and product. Whole units: a count, or paise. */
+  total: number;
+  note?: string;
+}
+
 export interface PublishPlanOptions {
   branchCode: string;
   /** "YYYY-MM" */
@@ -40,6 +49,12 @@ export interface PublishPlanOptions {
   extras?: readonly ExtraInput[];
   /** The business date in IST. Defaults to now. Pass it to pin a date for a demo. */
   today?: string;
+  /**
+   * Pin these people's monthly totals, up or down. Each becomes an adjustment against the
+   * person's quota. Everything else carries forward from the previous version.
+   * Cannot be combined with `extras`.
+   */
+  setTotals?: readonly TotalInput[];
 }
 
 export interface PublishPlanResult {
@@ -153,7 +168,7 @@ export async function publishPlan(options: PublishPlanOptions): Promise<PublishP
     });
   } else if (previous) {
     extras = previous.lines
-      .filter((line) => qtyFromDb(line.extraQty) > 0 && employeeById.has(line.userId))
+      .filter((line) => qtyFromDb(line.extraQty) !== 0 && employeeById.has(line.userId))
       .map((line) => ({
         userId: line.userId,
         metricId: line.metricId,
@@ -162,6 +177,44 @@ export async function publishPlan(options: PublishPlanOptions): Promise<PublishP
       }));
   } else {
     extras = [];
+  }
+
+    // Pinned totals: a person's new total becomes an adjustment against their quota, up or down.
+  if (options.setTotals && options.setTotals.length > 0) {
+    if (options.extras) throw new Error("Pass either extras or setTotals, not both");
+
+    const quotaByKey = new Map(
+      quotas.map((q) => [`${q.designationId}|${q.metricId}`, qtyFromDb(q.quantity)] as const),
+    );
+    const pinned = new Set<string>();
+    const pinnedEntries: ExtraEntry[] = [];
+
+    for (const input of options.setTotals) {
+      const employee = employeeByEmail.get(input.email);
+      if (!employee) throw new Error(`${input.email} is not an active employee of ${branch.code}`);
+      const metric = metricByCode.get(input.metricCode);
+      if (!metric) throw new Error(`Unknown metric code: ${input.metricCode}`);
+      if (!Number.isSafeInteger(input.total) || input.total < 0) {
+        throw new Error(`Total must be a non-negative whole number, got ${input.total}`);
+      }
+
+      const key = `${employee.id}|${metric.id}`;
+      if (pinned.has(key)) throw new Error(`Two totals given for ${input.email} / ${input.metricCode}`);
+      pinned.add(key);
+
+      const base = quotaByKey.get(`${employee.designationId}|${metric.id}`) ?? 0;
+      if (input.total !== base) {
+        pinnedEntries.push({
+          userId: employee.id,
+          metricId: metric.id,
+          quantity: input.total - base,
+          note: input.note,
+        });
+      }
+    }
+
+    // A pinned total replaces any earlier adjustment for the same person and product.
+    extras = [...extras.filter((e) => !pinned.has(`${e.userId}|${e.metricId}`)), ...pinnedEntries];
   }
 
   const branchTargetEntries = branchTargets.map((t) => ({

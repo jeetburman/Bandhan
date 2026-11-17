@@ -16,3 +16,13 @@ export function parseRupeesToPaise(text: string): number {
   if (paise > MAX_SALE_PAISE) throw new Error("That amount is too large.");
   return paise;
 }
+
+/** Paise as an editable amount in rupees, with lakh and crore grouping and no currency sign. */
+export function formatRupeesPlain(paise: number): string {
+  if (!Number.isSafeInteger(paise) || paise < 0) {
+    throw new Error(`Paise must be a non-negative whole number, got ${paise}`);
+  }
+  const whole = new Intl.NumberFormat("en-IN").format(Math.floor(paise / 100));
+  const rest = paise % 100;
+  return rest === 0 ? whole : `${whole}.${String(rest).padStart(2, "0")}`;
+}

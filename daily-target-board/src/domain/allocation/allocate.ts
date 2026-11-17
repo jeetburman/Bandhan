@@ -153,7 +153,9 @@ export function buildAllocation(input: AllocationInput): AllocationResult {
 
   // Extras on top.
   for (const extra of extras) {
-    assertQty(extra.quantity, "Extra");
+    if (!Number.isSafeInteger(extra.quantity)) {
+      throw new Error(`Adjustment must be a whole number, got ${extra.quantity}`);
+    }
     if (!employeeIds.has(extra.userId)) {
       throw new Error(`Extra given to someone outside this branch: ${extra.userId}`);
     }
@@ -177,6 +179,17 @@ export function buildAllocation(input: AllocationInput): AllocationResult {
       line.extraNote = line.extraNote ? `${line.extraNote}; ${extra.note}` : extra.note;
     }
     lines.set(key, line);
+  }
+
+  // A negative adjustment lowers a target, but never below zero. A line left with no quota and
+  // no net adjustment is dropped rather than kept as an empty row.
+  for (const [key, line] of lines) {
+    if (line.totalQty < 0) {
+      throw new Error(
+        `The adjustment for ${line.userId} on ${line.metricId} would make the target negative`,
+      );
+    }
+    if (line.baseQty === 0 && line.extraQty === 0) lines.delete(key);
   }
 
   // Lines in display order: employees as given, then metrics as given.

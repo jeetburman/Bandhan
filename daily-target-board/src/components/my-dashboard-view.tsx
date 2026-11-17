@@ -6,6 +6,7 @@ import { formatShortDate } from "@/lib/format-time";
 import { formatQty } from "@/lib/money";
 import { monthLabel } from "@/lib/month-label";
 import type { MyDashboard } from "@/server/my-dashboard";
+import type { ChangeView } from "@/server/target-changes";
 
 const SHADE: Record<RedShade, { edge: string; chip: string }> = {
   LIGHT: { edge: "border-l-red-300", chip: "bg-red-100 text-red-800" },
@@ -53,7 +54,7 @@ function planNote(card: MetricCard): string | null {
   return null;
 }
 
-function Card({ card }: { card: MetricCard }) {
+function Card({ card, change }: { card: MetricCard; change: ChangeView | null }) {
   const fmt = (q: number) => formatQty(card.unit, q);
   const edge =
     card.state === "BEHIND" && card.shade
@@ -87,6 +88,13 @@ function Card({ card }: { card: MetricCard }) {
         {fmt(card.verifiedQty)}
         <span className="text-sm font-normal text-slate-500"> of {fmt(card.monthTotal)} verified</span>
       </p>
+
+      {change ? (
+        <p className="mt-1 rounded-lg bg-sky-50 px-2 py-1 text-xs text-sky-900">
+          {change.text}
+          {change.note ? ` · ${change.note}` : ""}
+        </p>
+      ) : null}
 
       <div
         className="mt-2 h-2 rounded-full bg-slate-100"
@@ -134,7 +142,13 @@ function Card({ card }: { card: MetricCard }) {
   );
 }
 
-export function MyDashboardView({ dashboard }: { dashboard: MyDashboard }) {
+export function MyDashboardView({
+  dashboard,
+  changes,
+}: {
+  dashboard: MyDashboard;
+  changes: Record<string, ChangeView>;
+}) {
   const { cards, branchGoals } = dashboard;
 
   return (
@@ -179,7 +193,7 @@ export function MyDashboardView({ dashboard }: { dashboard: MyDashboard }) {
           </p>
           <ul className="mt-3 space-y-3">
             {cards.map((card) => (
-              <Card key={card.metricId} card={card} />
+              <Card key={card.metricId} card={card} change={changes[card.metricId] ?? null} />
             ))}
           </ul>
         </>

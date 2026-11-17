@@ -96,3 +96,17 @@ export function canViewBranch(
   if (actor.role === "BRANCH_MANAGER") return actor.branchId === branch.id;
   return false;
 }
+
+/**
+ * A branch manager can set targets for the people they can see in their own branch, but never
+ * their own. That keeps the person who assigns a target apart from the person who holds it.
+ */
+export function canEditTargetsOf(actor: ScopeActor, target: ScopeTarget): boolean {
+  return (
+    actor.role === "BRANCH_MANAGER" &&
+    actor.branchId !== null &&
+    target.branchId === actor.branchId &&
+    target.id !== actor.id &&
+    canViewUser(actor, target)
+  );
+}

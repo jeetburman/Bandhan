@@ -1,4 +1,5 @@
-﻿import { notFound, redirect } from "next/navigation";
+﻿import Link from "next/link";
+import { notFound, redirect } from "next/navigation";
 import { Suspense } from "react";
 import { BranchDetailView } from "@/components/branch-detail-view";
 import { istBusinessDate } from "@/lib/ist";
@@ -16,6 +17,12 @@ async function Body() {
 
   return (
     <main className="mx-auto max-w-2xl p-4">
+      <Link
+        href="/branch/targets"
+        className="block rounded-xl bg-slate-900 px-4 py-3 text-center text-sm font-medium text-white"
+      >
+        Assign employee targets
+      </Link>
       <BranchDetailView detail={detail} />
     </main>
   );
