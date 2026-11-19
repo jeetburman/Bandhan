@@ -32,19 +32,20 @@ model Cluster {
 }
 
 model Branch {
-  id           String          @id @default(cuid())
-  code         String          @unique
-  name         String
-  clusterId    String
-  cluster      Cluster         @relation(fields: [clusterId], references: [id])
-  users        User[]
-  holidays     Holiday[]
-  entries      ProgressEntry[]
-  createdAt    DateTime        @default(now())
-  BranchTarget BranchTarget[]
-  TargetPlan   TargetPlan[]
-  BranchSlice  BranchSlice[]
-  AuditLog     AuditLog[]
+  id            String               @id @default(cuid())
+  code          String               @unique
+  name          String
+  clusterId     String
+  cluster       Cluster              @relation(fields: [clusterId], references: [id])
+  users         User[]
+  holidays      Holiday[]
+  entries       ProgressEntry[]
+  targetChanges BranchTargetChange[]
+  createdAt     DateTime             @default(now())
+  BranchTarget  BranchTarget[]
+  TargetPlan    TargetPlan[]
+  BranchSlice   BranchSlice[]
+  AuditLog      AuditLog[]
 
   @@index([clusterId])
 }
@@ -60,15 +61,16 @@ model Designation {
 }
 
 model User {
-  id              String          @id @default(cuid())
-  name            String
-  email           String          @unique
-  passwordHash    String
-  holidaysAdded   Holiday[]
-  entries         ProgressEntry[] @relation("EntrySeller")
-  reviews         Approval[]      @relation("EntryReviewer")
-  isActive        Boolean         @default(true)
-  isBranchContact Boolean         @default(false) // true for the BH only
+  id                  String               @id @default(cuid())
+  name                String
+  email               String               @unique
+  passwordHash        String
+  holidaysAdded       Holiday[]
+  branchTargetChanges BranchTargetChange[] @relation("BranchTargetChanger")
+  entries             ProgressEntry[]      @relation("EntrySeller")
+  reviews             Approval[]           @relation("EntryReviewer")
+  isActive            Boolean              @default(true)
+  isBranchContact     Boolean              @default(false) // true for the BH only
 
   plansCreated   TargetPlan[] @relation("PlanCreator")
   plansPublished TargetPlan[] @relation("PlanPublisher")
@@ -119,23 +121,24 @@ enum CreditBasis {
 
 // A number that a target is set on, e.g. SA_COUNT or CASA_VALUE.
 model Metric {
-  id               String             @id @default(cuid())
-  code             String             @unique
-  name             String
-  unit             MetricUnit
-  scope            MetricScope        @default(INDIVIDUAL)
-  entryCredits     EntryCredit[]
-  pacing           Pacing
-  sortOrder        Int                @default(0)
-  isActive         Boolean            @default(true)
-  productLinks     ProductMetric[]
-  optionLinks      OptionMetric[]
-  BranchTarget     BranchTarget[]
-  DesignationQuota DesignationQuota[]
-  PlanBranchTarget PlanBranchTarget[]
-  TargetLine       TargetLine[]
-  TargetSlice      TargetSlice[]
-  BranchSlice      BranchSlice[]
+  id                  String               @id @default(cuid())
+  code                String               @unique
+  name                String
+  unit                MetricUnit
+  scope               MetricScope          @default(INDIVIDUAL)
+  entryCredits        EntryCredit[]
+  branchTargetChanges BranchTargetChange[]
+  pacing              Pacing
+  sortOrder           Int                  @default(0)
+  isActive            Boolean              @default(true)
+  productLinks        ProductMetric[]
+  optionLinks         OptionMetric[]
+  BranchTarget        BranchTarget[]
+  DesignationQuota    DesignationQuota[]
+  PlanBranchTarget    PlanBranchTarget[]
+  TargetLine          TargetLine[]
+  TargetSlice         TargetSlice[]
+  BranchSlice         BranchSlice[]
 }
 
 model ProductCategory {
@@ -492,4 +495,24 @@ model Approval {
   at       DateTime         @default(now())
 
   @@index([entryId])
+}
+
+// ---------- Branch target history ----------
+
+// One row each time the Cluster Head changes a branch target. Append-only.
+model BranchTargetChange {
+  id          String   @id @default(cuid())
+  branchId    String
+  branch      Branch   @relation(fields: [branchId], references: [id])
+  metricId    String
+  metric      Metric   @relation(fields: [metricId], references: [id])
+  month       String   @db.VarChar(7)
+  previousQty BigInt
+  newQty      BigInt
+  changedById String
+  changedBy   User     @relation("BranchTargetChanger", fields: [changedById], references: [id])
+  note        String?
+  at          DateTime @default(now())
+
+  @@index([branchId, month, at])
 }

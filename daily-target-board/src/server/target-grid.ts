@@ -4,6 +4,7 @@ import { cutoffPassed as isCutoffPassed } from "../lib/cutoff";
 import { db } from "../lib/db";
 import { istBusinessDate } from "../lib/ist";
 import { qtyFromDb } from "../lib/qty";
+import { loadBranchTargetChangeViews, type BranchChangeView } from "./branch-target-changes";
 import { loadCalendar } from "./calendar-config";
 import type { Actor } from "./permissions";
 import { canEditTargetsOf, userWhere, visibilityScope } from "./policy";
@@ -40,8 +41,10 @@ export interface OverviewMetric {
   name: string;
   unit: "COUNT" | "AMOUNT";
   allocated: number;
-  /** The Cluster Head's figure the plan was built against. null if none was set. */
+  /** The Cluster Head's current figure. null if she has set none. */
   branchTarget: number | null;
+  /** Her most recent change to it. */
+  change: BranchChangeView | null;
 }
 
 export interface OverviewPerson {
@@ -85,7 +88,10 @@ export async function loadFloors(
     _sum: { plannedQty: true },
   });
   return new Map(
-    rows.map((row) => [row.metricId, row._sum.plannedQty === null ? 0 : qtyFromDb(row._sum.plannedQty)]),
+    rows.map(
+      (row) =>
+        [row.metricId, row._sum.plannedQty === null ? 0 : qtyFromDb(row._sum.plannedQty)] as const,
+    ),
   );
 }
 
@@ -150,7 +156,7 @@ export async function loadEmployeeTargets(
   };
 }
 
-/** The branch's targets against the Cluster Head's, and the people the manager can edit. */
+/** The branch's targets against the Cluster Head's current ones, and the people the manager can edit. */
 export async function loadTargetsOverview(
   actor: Actor,
   now: Date = new Date(),
@@ -159,12 +165,12 @@ export async function loadTargetsOverview(
   const branchId = actor.branchId;
 
   const { today, month, effectiveFrom } = await loadEditWindow(actor.clusterId, branchId, now);
-  const [branch, plan, metrics, visible] = await Promise.all([
+  const [branch, plan, metrics, visible, currentTargets, changes] = await Promise.all([
     db.branch.findUnique({ where: { id: branchId } }),
     db.targetPlan.findFirst({
       where: { branchId, month, status: "PUBLISHED" },
       orderBy: { version: "desc" },
-      include: { lines: true, branchTargets: true },
+      include: { lines: true },
     }),
     db.metric.findMany({ where: { scope: "INDIVIDUAL", isActive: true }, orderBy: { sortOrder: "asc" } }),
     db.user.findMany({
@@ -172,6 +178,8 @@ export async function loadTargetsOverview(
       include: { designation: true },
       orderBy: [{ designation: { name: "asc" } }, { name: "asc" }],
     }),
+    db.branchTarget.findMany({ where: { branchId, month } }),
+    loadBranchTargetChangeViews(branchId, month),
   ]);
   if (!branch) return null;
 
@@ -183,9 +191,7 @@ export async function loadTargetsOverview(
     allocated.set(line.metricId, (allocated.get(line.metricId) ?? 0) + total);
     targetCount.set(line.userId, (targetCount.get(line.userId) ?? 0) + 1);
   }
-  const branchTargets = new Map(
-    (plan?.branchTargets ?? []).map((t) => [t.metricId, qtyFromDb(t.quantity)] as const),
-  );
+  const branchTargets = new Map(currentTargets.map((t) => [t.metricId, qtyFromDb(t.quantity)] as const));
 
   return {
     branchName: branch.name,
@@ -194,13 +200,14 @@ export async function loadTargetsOverview(
     effectiveFrom,
     planVersion: plan?.version ?? null,
     metrics: metrics
-      .filter((m) => (allocated.get(m.id) ?? 0) > 0 || branchTargets.has(m.id))
+      .filter((m) => (allocated.get(m.id) ?? 0) > 0 || branchTargets.has(m.id) || changes.has(m.id))
       .map((m) => ({
         metricId: m.id,
         name: m.name,
         unit: m.unit,
         allocated: allocated.get(m.id) ?? 0,
         branchTarget: branchTargets.get(m.id) ?? null,
+        change: changes.get(m.id) ?? null,
       })),
     people: visible.map((user) => ({
       id: user.id,

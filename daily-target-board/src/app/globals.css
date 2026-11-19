@@ -4,8 +4,32 @@
   color-scheme: light;
 }
 
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
 body {
   background: #f8fafc;
   color: #0f172a;
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+/* Phones zoom the page when a field is smaller than 16px, so every field is at least that. */
+input,
+select,
+textarea {
+  font-size: 16px;
+}
+
+/* The bottom tab bar is 3.5rem tall, plus the home-indicator space on phones that have one. */
+.bottom-nav {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.above-bottom-nav {
+  bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px));
+}
+
+.page-pad {
+  padding-bottom: calc(5rem + env(safe-area-inset-bottom, 0px));
 }

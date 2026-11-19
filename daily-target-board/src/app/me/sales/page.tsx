@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { EntryCard } from "@/components/entry-card";
+import { MeTabs } from "@/components/me-tabs";
 import { isPending } from "@/domain/entries/workflow";
 import { getCurrentActor } from "@/server/current-actor";
 import { listMyEntries } from "@/server/entries";
@@ -14,11 +15,12 @@ async function Body() {
 
   return (
     <main className="mx-auto max-w-2xl p-4">
+      <MeTabs />
       <div className="flex items-center justify-between gap-3">
         <h1 className="text-xl font-semibold">My sales</h1>
         <Link
           href="/me/new"
-          className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white"
+          className="shrink-0 rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white"
         >
           Record a sale
         </Link>

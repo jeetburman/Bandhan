@@ -9,7 +9,8 @@ export type AuditAction =
   | "ENTRY_APPROVED"
   | "ENTRY_VERIFIED"
   | "ENTRY_REJECTED"
-  | "TARGETS_CHANGED";
+  | "TARGETS_CHANGED"
+  | "BRANCH_TARGET_CHANGED";
 
 export interface AuditEntry {
   actorId: string | null;

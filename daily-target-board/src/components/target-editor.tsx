@@ -123,7 +123,7 @@ export function TargetEditor({ userId, cells }: { userId: string; cells: TargetC
         />
       </label>
 
-      <div className="fixed inset-x-0 bottom-0 border-t border-slate-200 bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+      <div className="above-bottom-nav fixed inset-x-0 z-30 border-t border-slate-200 bg-white p-3">
         <div className="mx-auto max-w-2xl">
           {state.error ? (
             <p role="alert" className="mb-2 text-sm text-red-700">

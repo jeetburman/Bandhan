@@ -1,4 +1,5 @@
 ﻿import { Suspense } from "react";
+import { MeTabs } from "@/components/me-tabs";
 import { MyDashboardView } from "@/components/my-dashboard-view";
 import { getCurrentActor } from "@/server/current-actor";
 import { loadMyDashboard } from "@/server/my-dashboard";
@@ -15,6 +16,7 @@ async function Body() {
 
   return (
     <main className="mx-auto max-w-2xl p-4">
+      <MeTabs />
       <MyDashboardView dashboard={dashboard} changes={Object.fromEntries(changes)} />
     </main>
   );
