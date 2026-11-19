@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { BranchDetailView } from "@/components/branch-detail-view";
@@ -21,6 +22,12 @@ async function Body({ params }: { params: Promise<{ code: string }> }) {
   return (
     <main className="mx-auto max-w-2xl p-4">
       <BranchPicker branches={pickerBranches} current={detail.branch.code} />
+      <Link
+        href={`/cluster/targets/${detail.branch.code}`}
+        className="mt-3 block rounded-xl border border-slate-300 bg-white px-4 py-3 text-center text-sm font-medium"
+      >
+        Edit this branch&apos;s targets
+      </Link>
       <BranchDetailView detail={detail} />
     </main>
   );

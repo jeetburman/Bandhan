@@ -16,13 +16,21 @@ async function Body() {
     loadClusterOverview(actor, month),
     listPickerBranches(actor),
   ]);
+  const people = overview.cards.reduce((sum, card) => sum + card.headcount, 0);
 
   return (
     <main className="mx-auto max-w-2xl p-4">
       <h1 className="text-xl font-semibold">{overview.clusterName}</h1>
       <p className="mt-1 text-sm text-slate-600">
-        {monthLabel(month)} · {overview.cards.length} branches
+        {monthLabel(month)} · {overview.cards.length} branches · {people} people
       </p>
+
+      <Link
+        href="/cluster/targets"
+        className="mt-4 block rounded-xl bg-slate-900 px-4 py-3 text-center text-sm font-medium text-white"
+      >
+        Edit branch targets
+      </Link>
 
       <div className="mt-4">
         <BranchPicker branches={pickerBranches} current={null} />
@@ -33,10 +41,10 @@ async function Body() {
           <li key={card.code}>
             <Link
               href={`/cluster/${card.code}`}
-              className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3"
+              className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-4"
             >
-              <div>
-                <p className="text-sm font-medium">{card.name}</p>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium">{card.name}</p>
                 <p className="text-xs text-slate-500">{card.headcount} people</p>
               </div>
               <PlanChip version={card.planVersion} stale={card.planStale} />

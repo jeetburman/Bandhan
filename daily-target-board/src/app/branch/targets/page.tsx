@@ -60,7 +60,7 @@ async function Body({ searchParams }: { searchParams: SearchParams }) {
 
       {overview.planVersion === null ? (
         <p className="mt-4 rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600">
-          No plan has been published for this branch this month yet.
+          No plan has been published for this branch this month yet. Publish it from the Branch page.
         </p>
       ) : (
         <>
@@ -72,7 +72,9 @@ async function Body({ searchParams }: { searchParams: SearchParams }) {
 
           <section className="mt-6">
             <h2 className="text-sm font-semibold">What you have assigned</h2>
-            <p className="text-xs text-slate-500">All employees added up, against the Cluster Head&apos;s target.</p>
+            <p className="text-xs text-slate-500">
+              All employees added up, against the Cluster Head&apos;s current target.
+            </p>
             <ul className="mt-2 divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white px-4">
               {overview.metrics.map((metric) => {
                 const result = comparison(metric);
@@ -80,16 +82,27 @@ async function Body({ searchParams }: { searchParams: SearchParams }) {
                   <li key={metric.metricId} className="py-3">
                     <div className="flex items-baseline justify-between gap-3 text-sm">
                       <span className="text-slate-700">{metric.name}</span>
-                      <span className="tabular-nums">
+                      <span className="text-right tabular-nums">
                         <span className="font-medium">{formatQty(metric.unit, metric.allocated)}</span>
                         {metric.branchTarget !== null ? (
-                          <span className="text-slate-500"> of {formatQty(metric.unit, metric.branchTarget)}</span>
+                          <span className="text-slate-500">
+                            {" "}
+                            of {formatQty(metric.unit, metric.branchTarget)}
+                          </span>
                         ) : null}
                       </span>
                     </div>
                     <p className="mt-1">
-                      <span className={`rounded-full px-2 py-0.5 text-xs ${result.style}`}>{result.text}</span>
+                      <span className={`rounded-full px-2 py-0.5 text-xs ${result.style}`}>
+                        {result.text}
+                      </span>
                     </p>
+                    {metric.change ? (
+                      <p className="mt-2 rounded-lg bg-sky-50 px-2 py-1 text-xs text-sky-900">
+                        Cluster Head · {metric.change.text}
+                        {metric.change.note ? ` · ${metric.change.note}` : ""}
+                      </p>
+                    ) : null}
                   </li>
                 );
               })}
@@ -102,8 +115,8 @@ async function Body({ searchParams }: { searchParams: SearchParams }) {
               {overview.people.map((person) => {
                 const card = (
                   <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-medium">{person.name}</p>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">{person.name}</p>
                       <p className="text-xs text-slate-500">{person.designation}</p>
                     </div>
                     <span className="shrink-0 text-xs text-slate-500">
@@ -127,7 +140,9 @@ async function Body({ searchParams }: { searchParams: SearchParams }) {
                         {card}
                       </Link>
                     ) : (
-                      <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">{card}</div>
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                        {card}
+                      </div>
                     )}
                   </li>
                 );

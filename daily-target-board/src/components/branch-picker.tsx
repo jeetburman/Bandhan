@@ -1,34 +1,39 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { Picker, type PickerOption } from "./picker";
 
 interface BranchPickerProps {
   branches: { code: string; name: string }[];
   /** The branch currently shown, or null on the overview. */
   current: string | null;
+  /** Where a branch's page lives. */
+  basePath?: string;
+  /** The label for "no branch chosen". Pass null to leave that choice out. */
+  allLabel?: string | null;
 }
 
-export function BranchPicker({ branches, current }: BranchPickerProps) {
+export function BranchPicker({
+  branches,
+  current,
+  basePath = "/cluster",
+  allLabel = "All branches",
+}: BranchPickerProps) {
   const router = useRouter();
 
+  const options: PickerOption[] = [
+    ...(allLabel ? [{ value: "", label: allLabel }] : []),
+    ...branches.map((branch) => ({ value: branch.code, label: branch.name })),
+  ];
+
   return (
-    <label className="block text-sm font-medium">
-      Branch
-      <select
-        value={current ?? ""}
-        onChange={(event) => {
-          const code = event.target.value;
-          router.push(code ? `/cluster/${code}` : "/cluster");
-        }}
-        className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2"
-      >
-        <option value="">All branches</option>
-        {branches.map((branch) => (
-          <option key={branch.code} value={branch.code}>
-            {branch.name}
-          </option>
-        ))}
-      </select>
-    </label>
+    <Picker
+      label="Branch"
+      name="branch"
+      options={options}
+      value={current ?? ""}
+      onChange={(code) => router.push(code ? `${basePath}/${code}` : basePath)}
+      placeholder="Choose a branch"
+    />
   );
 }
