@@ -41,3 +41,11 @@ export function canManageHoliday(
   }
   return false;
 }
+
+/** Only the Cluster Head sets branch targets, and only for branches in their own cluster. */
+export function canSetBranchTargets(
+  actor: Pick<Actor, "role" | "clusterId">,
+  branch: { clusterId: string },
+): boolean {
+  return actor.role === "CLUSTER_HEAD" && actor.clusterId === branch.clusterId;
+}
