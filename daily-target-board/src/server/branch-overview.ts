@@ -1,7 +1,16 @@
 import type { Branch, Metric } from "@prisma/client";
+import { monthRange, workingDaysInRange } from "../domain/calendar/calendar";
+import { firstPlanningDay } from "../domain/dashboard/suggest";
+import {
+  buildPerformance,
+  lastClosedDay,
+  type Performance,
+} from "../domain/performance/performance";
 import { calendarDrift } from "../domain/planning/drift";
+import { cutoffPassed as isCutoffPassed } from "../lib/cutoff";
 import { db } from "../lib/db";
 import { qtyFromDb } from "../lib/qty";
+import { loadCalendar } from "./calendar-config";
 import type { Actor } from "./permissions";
 import { canViewBranch, matchesScope, visibilityScope } from "./policy";
 
@@ -24,7 +33,7 @@ export interface ClusterOverview {
   cards: BranchCard[];
 }
 
-/** One metric for a person, a branch or the whole branch. */
+/** One product for a person, a branch or the whole branch, with how it is going. */
 export interface Figure {
   metricId: string;
   code: string;
@@ -32,8 +41,16 @@ export interface Figure {
   unit: "COUNT" | "AMOUNT";
   /** The month's target. A count, or paise. */
   monthQty: number;
-  /** What has fallen due by today: slices due on or before today. */
-  dueQty: number;
+  /** Verified so far this month. */
+  verifiedQty: number;
+  /** What the plan expected by the last closed day. */
+  expectedQty: number;
+  performance: Performance;
+}
+
+export interface BranchTotalFigure extends Figure {
+  /** The Cluster Head's current figure for this branch. null if she has set none. */
+  branchTargetQty: number | null;
 }
 
 export interface EmployeeFigures {
@@ -42,6 +59,8 @@ export interface EmployeeFigures {
   designation: string;
   /** Empty for people with no personal targets, such as the branch head. */
   figures: Figure[];
+  /** Products where this person is behind pace or fell short at month end. */
+  behindCount: number;
 }
 
 export interface BranchDetail {
@@ -50,10 +69,13 @@ export interface BranchDetail {
   today: string;
   planVersion: number | null;
   planStale: boolean;
-  /** Individual metrics, added up over the branch's employees. */
-  totals: Figure[];
+  days: { elapsed: number; remaining: number; total: number };
+  cutoffPassed: boolean;
+  /** Individual products, added up over the branch's employees. */
+  totals: BranchTotalFigure[];
   /** Branch-wide targets such as Affluent Legacy. */
   branchWide: Figure[];
+  /** Most behind first. */
   employees: EmployeeFigures[];
 }
 
@@ -113,128 +135,216 @@ export async function loadClusterOverview(actor: Actor, month: string): Promise<
   return { clusterName: cluster?.name ?? "Cluster", cards };
 }
 
-function figure(metric: Metric, monthQty: number, dueQty: number): Figure {
-  return {
-    metricId: metric.id,
-    code: metric.code,
-    name: metric.name,
-    unit: metric.unit,
-    monthQty,
-    dueQty,
-  };
+function bump(map: Map<string, number>, key: string, quantity: number): void {
+  map.set(key, (map.get(key) ?? 0) + quantity);
 }
 
 /**
  * One branch for one month. Returns null when the branch does not exist or this person
  * may not open it, so the caller cannot tell the two apart.
+ * `today` must be the IST date of `now`, which decides whether today has closed.
  */
 export async function loadBranchDetail(
   actor: Actor,
   branchCode: string,
   month: string,
   today: string,
+  now: Date = new Date(),
 ): Promise<BranchDetail | null> {
   const branch = await db.branch.findUnique({ where: { code: branchCode } });
   if (!branch || !canViewBranch(actor, branch)) return null;
 
-  const [plan, employees, metrics, slices, branchSlices, holidays] = await Promise.all([
-    db.targetPlan.findFirst({
-      where: { branchId: branch.id, month, status: "PUBLISHED" },
-      orderBy: { version: "desc" },
-      include: { lines: true, branchTargets: true },
-    }),
-    db.user.findMany({
-      where: { branchId: branch.id, isActive: true },
-      include: { designation: true },
-      orderBy: [{ designation: { name: "asc" } }, { name: "asc" }],
-    }),
-    db.metric.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" } }),
-    db.targetSlice.findMany({
-      where: { month, user: { branchId: branch.id } },
-      select: { userId: true, metricId: true, dueDate: true, plannedQty: true },
-    }),
-    db.branchSlice.findMany({
-      where: { branchId: branch.id, month },
-      select: { metricId: true, dueDate: true, plannedQty: true },
-    }),
-    db.holiday.findMany({
-      where: {
-        clusterId: branch.clusterId,
-        date: { startsWith: month },
-        OR: [{ branchId: null }, { branchId: branch.id }],
-      },
-    }),
-  ]);
+  const range = monthRange(month);
+  const passed = isCutoffPassed(now);
+  const closedThrough = lastClosedDay(today, passed);
 
-  const individual = metrics.filter((metric) => metric.scope === "INDIVIDUAL");
+  const [plan, employees, metrics, currentTargets, slices, branchSlices, credits, calendarInfo] =
+    await Promise.all([
+      db.targetPlan.findFirst({
+        where: { branchId: branch.id, month, status: "PUBLISHED" },
+        orderBy: { version: "desc" },
+        include: { lines: true, branchTargets: true },
+      }),
+      db.user.findMany({
+        where: { branchId: branch.id, isActive: true },
+        include: { designation: true },
+        orderBy: [{ designation: { name: "asc" } }, { name: "asc" }],
+      }),
+      db.metric.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" } }),
+      db.branchTarget.findMany({ where: { branchId: branch.id, month } }),
+      db.targetSlice.findMany({
+        where: { month, dueDate: { lte: closedThrough }, user: { branchId: branch.id } },
+        select: { userId: true, metricId: true, plannedQty: true },
+      }),
+      db.branchSlice.findMany({
+        where: { branchId: branch.id, month, dueDate: { lte: closedThrough } },
+        select: { metricId: true, plannedQty: true },
+      }),
+      db.entryCredit.findMany({
+        where: {
+          entry: {
+            branchId: branch.id,
+            status: "VERIFIED",
+            activityDate: { gte: range.start, lte: range.end },
+          },
+        },
+        select: {
+          metricId: true,
+          quantity: true,
+          entry: { select: { userId: true, activityDate: true } },
+        },
+      }),
+      loadCalendar(branch.clusterId, branch.id, month),
+    ]);
+  const { calendar, holidays } = calendarInfo;
 
-  // Month target per person and metric.
-  const monthByUser = new Map<string, Map<string, number>>();
+  // Working days: how many have closed, and how many are left.
+  const closedEnd = closedThrough > range.end ? range.end : closedThrough;
+  const elapsed = workingDaysInRange(range.start, closedEnd, calendar).length;
+  const first = firstPlanningDay(today, passed, calendar);
+  const remaining = first > range.end ? 0 : workingDaysInRange(first, range.end, calendar).length;
+  const total = workingDaysInRange(range.start, range.end, calendar).length;
+
+  const metricById = new Map(metrics.map((m) => [m.id, m] as const));
+  const individual = metrics.filter((m) => m.scope === "INDIVIDUAL");
+  const key = (userId: string, metricId: string) => `${userId}|${metricId}`;
+
+  // Targets, from the published plan.
+  const targetOf = new Map<string, number>();
+  const assignedByMetric = new Map<string, number>();
   for (const line of plan?.lines ?? []) {
-    const byMetric = monthByUser.get(line.userId) ?? new Map<string, number>();
-    byMetric.set(line.metricId, qtyFromDb(line.baseQty) + qtyFromDb(line.extraQty));
-    monthByUser.set(line.userId, byMetric);
+    const lineTotal = qtyFromDb(line.baseQty) + qtyFromDb(line.extraQty);
+    targetOf.set(key(line.userId, line.metricId), lineTotal);
+    bump(assignedByMetric, line.metricId, lineTotal);
   }
 
-  // What has fallen due by today, per person and metric.
-  const dueByLine = new Map<string, number>();
+  // What the plan expected by the last closed day.
+  const expectedOf = new Map<string, number>();
+  const expectedByMetric = new Map<string, number>();
   for (const slice of slices) {
-    if (slice.dueDate > today) continue;
-    const key = `${slice.userId}|${slice.metricId}`;
-    dueByLine.set(key, (dueByLine.get(key) ?? 0) + qtyFromDb(slice.plannedQty));
+    const planned = qtyFromDb(slice.plannedQty);
+    bump(expectedOf, key(slice.userId, slice.metricId), planned);
+    bump(expectedByMetric, slice.metricId, planned);
   }
+  const branchWideExpected = new Map<string, number>();
+  for (const slice of branchSlices) bump(branchWideExpected, slice.metricId, qtyFromDb(slice.plannedQty));
+
+  // Verified sales, split into "all dates" and "on closed days".
+  const verifiedOf = new Map<string, number>();
+  const verifiedClosedOf = new Map<string, number>();
+  const branchVerified = new Map<string, number>();
+  const branchVerifiedClosed = new Map<string, number>();
+  const wideVerified = new Map<string, number>();
+  const wideVerifiedClosed = new Map<string, number>();
+  for (const credit of credits) {
+    const metric = metricById.get(credit.metricId);
+    if (!metric) continue;
+    const quantity = qtyFromDb(credit.quantity);
+    const onClosedDay = credit.entry.activityDate <= closedThrough;
+
+    if (metric.scope === "BRANCH") {
+      bump(wideVerified, metric.id, quantity);
+      if (onClosedDay) bump(wideVerifiedClosed, metric.id, quantity);
+    } else {
+      const personKey = key(credit.entry.userId, metric.id);
+      bump(verifiedOf, personKey, quantity);
+      bump(branchVerified, metric.id, quantity);
+      if (onClosedDay) {
+        bump(verifiedClosedOf, personKey, quantity);
+        bump(branchVerifiedClosed, metric.id, quantity);
+      }
+    }
+  }
+
+  const figure = (
+    metric: Metric,
+    monthQty: number,
+    verified: number,
+    verifiedClosed: number,
+    expected: number,
+  ): Figure => ({
+    metricId: metric.id,
+    code: metric.code,
+    name: metric.name,
+    unit: metric.unit,
+    monthQty,
+    verifiedQty: verified,
+    expectedQty: expected,
+    performance: buildPerformance({
+      monthTotal: monthQty,
+      verifiedQty: verified,
+      verifiedClosedQty: verifiedClosed,
+      expectedQty: expected,
+      elapsedWorkingDays: elapsed,
+      remainingWorkingDays: remaining,
+    }),
+  });
 
   const employeeFigures = employees.map((employee): EmployeeFigures => {
-    const monthByMetric = monthByUser.get(employee.id);
-    const figures = monthByMetric
-      ? individual
-          .filter((metric) => monthByMetric.has(metric.id))
-          .map((metric) =>
-            figure(
-              metric,
-              monthByMetric.get(metric.id) ?? 0,
-              dueByLine.get(`${employee.id}|${metric.id}`) ?? 0,
-            ),
-          )
-      : [];
+    const figures = individual.flatMap((metric) => {
+      const target = targetOf.get(key(employee.id, metric.id)) ?? 0;
+      if (target <= 0) return [];
+      const personKey = key(employee.id, metric.id);
+      return [
+        figure(
+          metric,
+          target,
+          verifiedOf.get(personKey) ?? 0,
+          verifiedClosedOf.get(personKey) ?? 0,
+          expectedOf.get(personKey) ?? 0,
+        ),
+      ];
+    });
     return {
       userId: employee.id,
       name: employee.name,
       designation: employee.designation.name,
       figures,
+      behindCount: figures.filter(
+        (f) => f.performance.outlook === "BEHIND" || f.performance.outlook === "NO_DAYS_LEFT",
+      ).length,
     };
   });
 
-  const totals = individual
-    .map((metric) => {
-      let monthQty = 0;
-      let dueQty = 0;
-      for (const employee of employeeFigures) {
-        const found = employee.figures.find((f) => f.metricId === metric.id);
-        if (found) {
-          monthQty += found.monthQty;
-          dueQty += found.dueQty;
-        }
-      }
-      return figure(metric, monthQty, dueQty);
-    })
-    .filter((f) => f.monthQty > 0);
+  const targetByMetric = new Map(currentTargets.map((t) => [t.metricId, qtyFromDb(t.quantity)] as const));
+  const totals = individual.flatMap((metric): BranchTotalFigure[] => {
+    const assigned = assignedByMetric.get(metric.id) ?? 0;
+    if (assigned <= 0) return [];
+    return [
+      {
+        ...figure(
+          metric,
+          assigned,
+          branchVerified.get(metric.id) ?? 0,
+          branchVerifiedClosed.get(metric.id) ?? 0,
+          expectedByMetric.get(metric.id) ?? 0,
+        ),
+        branchTargetQty: targetByMetric.get(metric.id) ?? null,
+      },
+    ];
+  });
 
   const branchWide = metrics
     .filter((metric) => metric.scope === "BRANCH")
     .flatMap((metric) => {
       const target = plan?.branchTargets.find((t) => t.metricId === metric.id);
       if (!target) return [];
-      const dueQty = branchSlices
-        .filter((s) => s.metricId === metric.id && s.dueDate <= today)
-        .reduce((acc, s) => acc + qtyFromDb(s.plannedQty), 0);
-      return [figure(metric, qtyFromDb(target.quantity), dueQty)];
+      return [
+        figure(
+          metric,
+          qtyFromDb(target.quantity),
+          wideVerified.get(metric.id) ?? 0,
+          wideVerifiedClosed.get(metric.id) ?? 0,
+          branchWideExpected.get(metric.id) ?? 0,
+        ),
+      ];
     });
 
   const planStale = plan
-    ? calendarDrift(plan.holidayDates, holidays.map((h) => h.date)).stale
+    ? calendarDrift(plan.holidayDates, holidays).stale
     : false;
-    // Totals above include everyone. The list below shows only the people this person may see.
+
+  // The totals above include everyone. The list below shows only the people this person may see.
   const scope = visibilityScope(actor);
   const visibleIds = new Set(
     employees
@@ -249,15 +359,23 @@ export async function loadBranchDetail(
       )
       .map((employee) => employee.id),
   );
+  const visibleEmployees = employeeFigures
+    .filter((employee) => visibleIds.has(employee.userId))
+    .map((employee, index) => ({ employee, index }))
+    .sort((a, b) => b.employee.behindCount - a.employee.behindCount || a.index - b.index)
+    .map(({ employee }) => employee);
+
   return {
     branch: { code: branch.code, name: branch.name },
     month,
     today,
     planVersion: plan?.version ?? null,
     planStale,
+    days: { elapsed, remaining, total },
+    cutoffPassed: passed,
     totals,
     branchWide,
-    employees: employeeFigures.filter((employee) => visibleIds.has(employee.userId)),
+    employees: visibleEmployees,
   };
 }
 
@@ -266,8 +384,9 @@ export async function loadOwnBranchDetail(
   actor: Actor,
   month: string,
   today: string,
+  now: Date = new Date(),
 ): Promise<BranchDetail | null> {
   if (!actor.branchId) return null;
   const branch = await db.branch.findUnique({ where: { id: actor.branchId } });
-  return branch ? loadBranchDetail(actor, branch.code, month, today) : null;
+  return branch ? loadBranchDetail(actor, branch.code, month, today, now) : null;
 }
