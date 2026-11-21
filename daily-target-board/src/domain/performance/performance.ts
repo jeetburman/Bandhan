@@ -37,6 +37,10 @@ export interface Performance {
   requiredRate: number | null;
   /** An estimate of the month-end total at the current rate. null before any day has closed. */
   projectedQty: number | null;
+    /** Verified on days that have closed, the basis of the current pace. */
+  verifiedClosedQty: number;
+  elapsedWorkingDays: number;
+  remainingWorkingDays: number;
   outlook: Outlook;
 }
 
@@ -104,6 +108,9 @@ export function buildPerformance(input: PerformanceInput): Performance {
     currentRate,
     requiredRate,
     projectedQty,
+    verifiedClosedQty,
+    elapsedWorkingDays,
+    remainingWorkingDays,
     outlook,
   };
 }

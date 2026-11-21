@@ -1,5 +1,5 @@
 import type { Outlook } from "@/domain/performance/performance";
-import { formatRate } from "@/lib/format-rate";
+import { formatPace } from "@/lib/format-pace";
 import { formatQty } from "@/lib/money";
 import type { Figure } from "@/server/branch-overview";
 
@@ -22,19 +22,6 @@ function paceLine(figure: Figure): string {
   return `${base} · level with the plan`;
 }
 
-function rateLine(figure: Figure): string | null {
-  const p = figure.performance;
-  const parts: string[] = [];
-  if (p.currentRate !== null) parts.push(`doing ${formatRate(figure.unit, p.currentRate)}`);
-  if (p.outlook === "NO_DAYS_LEFT") parts.push("no working days left");
-  else if (p.requiredRate !== null && p.remainingQty > 0) {
-    parts.push(`needs ${formatRate(figure.unit, p.requiredRate)}`);
-  }
-  if (parts.length === 0) return null;
-  const text = parts.join(" · ");
-  return text.charAt(0).toUpperCase() + text.slice(1);
-}
-
 export function PerformanceRow({
   figure,
   showProjection = false,
@@ -51,7 +38,7 @@ export function PerformanceRow({
       : p.outlook === "BEHIND" || p.outlook === "NO_DAYS_LEFT"
         ? "bg-red-600"
         : "bg-slate-700";
-  const rates = rateLine(figure);
+  const rates = formatPace(figure.unit, figure.performance);
   const showMarker = p.expectedPercent > 0 && p.expectedPercent < 100;
 
   return (
