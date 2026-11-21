@@ -1,54 +1,41 @@
-﻿import Link from "next/link";
+﻿import { notFound } from "next/navigation";
 import { Suspense } from "react";
-import { BranchPicker } from "@/components/branch-picker";
-import { PlanChip } from "@/components/plan-chip";
-import { istBusinessDate } from "@/lib/ist";
+import { BranchCard } from "@/components/branch-card";
+import { ClusterSummaryCard } from "@/components/cluster-summary-card";
 import { monthLabel } from "@/lib/month-label";
-import { listPickerBranches, loadClusterOverview } from "@/server/branch-overview";
+import { loadClusterView } from "@/server/cluster-summary";
 import { getCurrentActor } from "@/server/current-actor";
 
 async function Body() {
   const actor = await getCurrentActor();
   if (!actor) return null; // the gate has already redirected
 
-  const month = istBusinessDate(new Date()).slice(0, 7);
-  const [overview, pickerBranches] = await Promise.all([
-    loadClusterOverview(actor, month),
-    listPickerBranches(actor),
-  ]);
-  const people = overview.cards.reduce((sum, card) => sum + card.headcount, 0);
+  const view = await loadClusterView(actor);
+  if (!view) notFound();
 
   return (
     <main className="mx-auto max-w-2xl p-4">
-      <h1 className="text-xl font-semibold">{overview.clusterName}</h1>
-      <p className="mt-1 text-sm text-slate-600">
-        {monthLabel(month)} · {overview.cards.length} branches · {people} people
+      <h1 className="text-[22px] font-bold">{view.clusterName}</h1>
+      <p className="text-sm text-slate-600">
+        {monthLabel(view.month)} · {view.cards.length} branches · {view.headcount} people
       </p>
 
-      <Link
-        href="/cluster/targets"
-        className="mt-4 block rounded-xl bg-slate-900 px-4 py-3 text-center text-sm font-medium text-white"
-      >
-        Edit branch targets
-      </Link>
+      {view.overall ? (
+        <div className="mt-4">
+          <ClusterSummaryCard summary={view.overall} />
+        </div>
+      ) : (
+        <p className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600">
+          No branch has published a plan for this month yet.
+        </p>
+      )}
 
-      <div className="mt-4">
-        <BranchPicker branches={pickerBranches} current={null} />
-      </div>
-
-      <ul className="mt-4 space-y-2">
-        {overview.cards.map((card) => (
+      <h2 className="mt-6 text-[15px] font-semibold">Your branches</h2>
+      <p className="text-sm text-slate-600">The ones that need you first are at the top.</p>
+      <ul className="mt-3 space-y-3">
+        {view.cards.map((card) => (
           <li key={card.code}>
-            <Link
-              href={`/cluster/${card.code}`}
-              className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-4"
-            >
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium">{card.name}</p>
-                <p className="text-xs text-slate-500">{card.headcount} people</p>
-              </div>
-              <PlanChip version={card.planVersion} stale={card.planStale} />
-            </Link>
+            <BranchCard card={card} />
           </li>
         ))}
       </ul>
